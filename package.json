@@ -1,0 +1,15 @@
+{
+  "name": "wac",
+  "version": "0.1.0",
+  "description": "WebAssembly compiler toolkit",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^16.10.3",
+    "tsc": "^2.0.3"
+  }
+}
