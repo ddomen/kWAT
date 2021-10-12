@@ -1,0 +1,8 @@
+.vscode
+package-lock.json
+dist
+test_dist
+node_modules
+docs
+
+test/main.wasm

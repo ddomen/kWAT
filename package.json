@@ -1,0 +1,36 @@
+{
+  "name": "kwat",
+  "version": "0.1.0",
+  "description": "WebAssembly toolkit",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "npx tsc",
+    "docs": "npx typedoc src/index.ts",
+    "test": "npx jasmine-ts --config=jasmine.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ddomen/kwat.git"
+  },
+  "keywords": [
+    "WebAssembly", "wasm", "wat",
+    "compilation", "assembly", "web"
+  ],
+  "author": "Daniele Domenichelli <daniele.domenichelli.5+npm@gmail.com>",
+  "license": "GPL-3.0-or-later",
+  "bugs": {
+    "url": "https://github.com/ddomen/kwat/issues",
+    "email": "daniele.domenichelli.5+npm@gmail.com"
+  },
+  "homepage": "https://github.com/ddomen/kwat#readme",
+  "devDependencies": {
+    "@types/jasmine": "^3.9.1",
+    "@types/node": "^16.10.3",
+    "jasmine": "^3.10.0",
+    "jasmine-spec-reporter": "^7.0.0",
+    "jasmine-ts": "^0.4.0",
+    "ts-node": "^10.3.0",
+    "tsc": "^2.0.3",
+    "typedoc": "^0.22.15"
+  }
+}

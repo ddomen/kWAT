@@ -1,0 +1,31 @@
+{
+  "reporters": [
+    {
+      "name": "jasmine-spec-reporter#SpecReporter",
+      "options": {
+        "suite": { "displayNumber": true },
+        "spec": {
+            "displayDuration": true,
+            "displayErrorMessages": false,
+            "displayFailed": true,
+            "displayPending": true,
+            "displayStacktrace": "pretty",
+            "displaySuccessful": true
+        },
+        "colors": { "enabled": true },
+        "prefixes": {
+          "successful": "[SUCC] ",
+          "failed": "[FAIL] ",
+          "pending": "[WAIT] "
+        }
+      }
+    }
+  ],
+  "spec_dir": "test",
+  "spec_files": [ "*test.ts" ],
+  "helpers": [ "test/helper.ts" ],
+  "failSpecWithNoExpectations": false,
+  "stopSpecOnExpectationFailure": false,
+  "stopOnSpecFailure": false,
+  "random": false
+}
