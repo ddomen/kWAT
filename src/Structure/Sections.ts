@@ -98,9 +98,22 @@ export class FunctionSection extends Section<SectionTypes.function> {
         return indices;
     }
 
+    public indexOf(fn: Types.FunctionType): number {
+        if (fn.isReference) { return this.Functions.findIndex(f => f === fn || fn.refer(f)); }
+        return this.Functions.indexOf(fn);
+    }
+
     public add(fn: Types.FunctionType): boolean {
-        if (this.Functions.indexOf(fn) === -1) {
+        if (!fn.isReference && this.Functions.indexOf(fn) === -1) {
             this.Functions.push(fn);
+            return true;
+        }
+        return false;
+    }
+
+    public import(fn: Types.FunctionType): boolean {
+        if (!fn.isReference && this.Functions.indexOf(fn) === -1) {
+            this.Functions.unshift(fn);
             return true;
         }
         return false;
@@ -129,6 +142,14 @@ export class TableSection extends Section<SectionTypes.table> {
         super(SectionTypes.table);
         protect(this, 'Tables', [], true);
     }
+    
+    public import(table: Types.TableType): boolean {
+        if (this.Tables.indexOf(table) == -1){
+            this.Tables.unshift(table);
+            return true;
+        }
+        return false;
+    }
 
     public override contentEncode(encoder: IEncoder): void {
         if (!this.Tables.length) { return; }
@@ -149,6 +170,14 @@ export class MemorySection extends Section<SectionTypes.memory> {
         protect(this, 'Memories', [], true);
     }
 
+    public import(memory: Types.MemoryType): boolean {
+        if (this.Memories.indexOf(memory) == -1) {
+            this.Memories.unshift(memory);
+            return true;
+        }
+        return false;
+    }
+
     public override contentEncode(encoder: IEncoder): void {
         if (!this.Memories.length) { return; }
         encoder.vector(this.Memories);
@@ -163,10 +192,22 @@ export class MemorySection extends Section<SectionTypes.memory> {
 export class GlobalVariable implements IEncodable<Module> {
     public readonly Variable!: Types.GlobalType;
     public readonly Initialization!: Expression;
+    public Reference: string;
 
-    constructor(type: Types.ValueType, init: Expression, constant: boolean = false) {
+    public get isReference(): boolean { return this.Variable === -1 as any && !!this.Reference && !this.Initialization; }
+
+    constructor(type: Types.ValueType, init: Expression, constant: boolean = false, reference?: string) {
         protect(this, 'Variable', new Types.GlobalType(type, constant), true);
         protect(this, 'Initialization', init, true);
+        this.Reference = reference || '';
+    }
+
+    public referred(other: GlobalVariable | string): boolean {
+        if (other instanceof GlobalVariable) { return other.isReference && this.Reference === other.Reference; }
+        return this.Reference === other;
+    }
+    public refer(other: GlobalVariable | string): boolean {
+        return this.isReference && (other instanceof GlobalVariable ? other.Reference : other) === other;
     }
 
     public encode(encoder: IEncoder, context: Module) {
@@ -181,6 +222,10 @@ export class GlobalVariable implements IEncodable<Module> {
             type.Constant
         );
     }
+
+    public static refer(name: string): GlobalVariable {
+        return new GlobalVariable(-1, null as any, false, name);
+    }
 }
 
 export class GlobalSection extends Section<SectionTypes.global> {
@@ -192,10 +237,32 @@ export class GlobalSection extends Section<SectionTypes.global> {
         protect(this, 'Globals', [], true);
     }
 
+    public indexOf(variable: GlobalVariable): number {
+        if (variable.isReference) { return this.Globals.findIndex(g => g === variable || variable.refer(g)); }
+        return this.Globals.indexOf(variable);
+    }
+
+    public add(variable: GlobalVariable): boolean {
+        if (!variable.isReference && this.Globals.indexOf(variable) === -1) {
+            this.Globals.push(variable);
+            return true;
+        }
+        return false;
+    }
+
+    public import(variable: GlobalVariable): boolean {
+        if (!variable.isReference && this.Globals.indexOf(variable) === -1) {
+            this.Globals.unshift(variable);
+            return true;
+        }
+        return false;
+    }
+
     public override contentEncode(encoder: IEncoder, context: Module): void {
         if (!this.Globals.length) { return; }
         encoder.vector(this.Globals, context);
     }
+
 
     public override decode(decoder: IDecoder, context: Module) {
         this.Globals.length = 0;
@@ -236,7 +303,7 @@ export class StartSection extends Section<SectionTypes.start> {
 type ExchangeNarrower<R extends ImportDescription> = { Description: R };
 
 export enum ExchangeDescriptionCode {
-    type    = 0x00,
+    function    = 0x00,
     table   = 0x01,
     memory  = 0x02,
     global  = 0x03
@@ -263,7 +330,7 @@ export class ImportSegment implements IEncodable<Types.FunctionType[]> {
         if (this.isTable()) { return ExchangeDescriptionCode.table}
         else if (this.isMemory()) { return ExchangeDescriptionCode.memory; }
         else if (this.isGlobal()) { return ExchangeDescriptionCode.global; }
-        else if (this.isFunction()) { return ExchangeDescriptionCode.type; }
+        else if (this.isFunction()) { return ExchangeDescriptionCode.function; }
         return -1;
     }
 
@@ -280,13 +347,28 @@ export class ImportSegment implements IEncodable<Types.FunctionType[]> {
         return index;
     }
 
+    public equals(other: ImportSegment): boolean {
+        return this.Name == other.Name &&
+                this.Module == other.Module &&
+                (
+                    this.Description == other.Description ||
+                    'equals' in this.Description &&
+                    'equals' in other.Description &&
+                    this.Description.equals(other.Description)
+                )
+    }
+
+    public clone(): ImportSegment {
+        return new ImportSegment(this.Module, this.Name, this.Description);
+    }
+
     public encode(encoder: IEncoder, context: Types.FunctionType[]) {
         if (this.isFunction()) {
             let index = this.getIndex(context);
             encoder
                 .vector(this.Module)
                 .vector(this.Name)
-                .uint8(ExchangeDescriptionCode.type)
+                .uint8(ExchangeDescriptionCode.function)
                 .uint32(index)
             ;
         }
@@ -308,7 +390,7 @@ export class ImportSegment implements IEncodable<Types.FunctionType[]> {
             type = decoder.uint8(),
             desc;
         switch (type) {
-            case ExchangeDescriptionCode.type: {
+            case ExchangeDescriptionCode.function: {
                 let index = decoder.uint32();
                 if (!context.TypeSection.Types[index]) {
                     throw new Error('Invalid Import Segment function reference');
@@ -348,6 +430,24 @@ export class ImportSection extends Section<SectionTypes.import> {
         encoder.vector(this.Imports, context.TypeSection.Types);
     }
 
+    public add(segment: ImportSegment, context?: Module): boolean {
+        if (this.Imports.find(s => s.equals(segment))) {
+            return false;
+        }
+        this.Imports.push(segment.clone());
+        if (context) {
+            let target;
+            switch (segment.code) {
+                case ExchangeDescriptionCode.function: target = context.FunctionSection; break
+                case ExchangeDescriptionCode.global: target = context.GlobalSection; break
+                case ExchangeDescriptionCode.memory: target = context.MemorySection; break
+                case ExchangeDescriptionCode.table: target = context.TableSection; break
+            }
+            target.import(segment.Description as any);
+        }
+        return true;
+    }
+
     public override decode(decoder: IDecoder, context: Module) {
         this.Imports.length = 0;
         this.Imports.push(...decoder.vector(ImportSegment, context));
@@ -376,7 +476,7 @@ export class ExportSegment implements IEncodable<Module> {
         if (this.isTable()) { return ExchangeDescriptionCode.table}
         else if (this.isMemory()) { return ExchangeDescriptionCode.memory; }
         else if (this.isGlobal()) { return ExchangeDescriptionCode.global; }
-        else if (this.isFunction()) { return ExchangeDescriptionCode.type; }
+        else if (this.isFunction()) { return ExchangeDescriptionCode.function; }
         return -1;
     }
 
@@ -413,7 +513,7 @@ export class ExportSegment implements IEncodable<Module> {
             index = decoder.uint32(),
             target;
         switch (code) {
-            case ExchangeDescriptionCode.type:
+            case ExchangeDescriptionCode.function:
                 target = context.TypeSection.Types;
                 break;
             case ExchangeDescriptionCode.global:
@@ -521,7 +621,7 @@ export class ElementSegment implements IEncodable<Module> {
     public get usesElementType(): boolean { return !!(this.Type & 0x04); }
 
     public getFunctionIndices(context: Module, pass?: boolean): number[] {
-        let idxs = this.Functions.map(f => context.FunctionSection.Functions.indexOf(f));
+        let idxs = this.Functions.map(f => context.FunctionSection.indexOf(f));
         let wrong;
         if (!pass && idxs.some(i => (wrong = i, i < 0))) { throw new Error('Invalid function definition index (at: ' + wrong + ')') }
         return idxs;
@@ -905,7 +1005,10 @@ export class CodeSection extends Section<SectionTypes.code> {
     
     public contentEncode(encoder: IEncoder, context: Module): void {
         if (
-            this.Codes.length != context.FunctionSection.Functions.length ||
+            this.Codes.length != (
+                context.FunctionSection.Functions.length -
+                context.ImportSection.Imports.filter(i => i.isFunction()).length
+            ) ||
             this.Codes.some((cs, i) => cs.Signature != context.FunctionSection.Functions[i])
         ) { throw new Error('Code Section does not correspond to Function Section!'); }
         encoder.vector(this.Codes, context);

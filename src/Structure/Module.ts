@@ -76,6 +76,10 @@ export class Module implements IEncodable {
         this.TypeSection.add(def.segment.Signature);
         this.FunctionSection.add(def.segment.Signature);
         this.CodeSection.add(def.segment);
+        def.globals.forEach(g => this.GlobalSection.add(g));
+        def.imports.forEach(i => this.ImportSection.add(i));
+        def.segment.Body.getDefinedTypes().forEach(t => this.TypeSection.add(t));
+        def.segment.Body.getDefinedGlobals().forEach(g => this.GlobalSection.add(g));
         return this;
     }
 

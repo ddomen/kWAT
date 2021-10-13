@@ -1,5 +1,5 @@
 {
-  "name": "wac",
+  "name": "kwat",
   "version": "0.1.0",
   "description": "WebAssembly compiler toolkit",
   "main": "dist/index.js",

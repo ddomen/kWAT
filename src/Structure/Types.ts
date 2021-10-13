@@ -24,6 +24,7 @@ export type MutableType = Type.const | Type.var;
 export type TypesKey<T extends Type=Type> = {
     [K in keyof typeof Type]: (typeof Type)[K] extends T ? K : never;
 }[keyof typeof Type]
+export type Stack = [ ResultType, ResultType ];
 
 export type ValueTypeKey = TypesKey<ValueType>;
 export type ReferenceTypeKey = TypesKey<ReferenceType>;
@@ -53,10 +54,14 @@ export function validMutableKey(target: string): target is MutableTypeKey { retu
 export class FunctionType implements IEncodable {
     public readonly Parameters!: ResultType;
     public readonly Results!: ResultType;
+    public Reference: string;
 
-    public constructor(params: ResultType = [], results: ResultType = []) {
+    public get isReference(): boolean { return !!this.Reference && !this.Parameters.length && !this.Results.length; }
+
+    public constructor(params: ResultType = [], results: ResultType = [], reference?: string) {
         protect(this, 'Parameters', params.slice(), true);
         protect(this, 'Results', results.slice(), true);
+        this.Reference = reference || '';
     }
 
     public encode(encoder: IEncoder): void {
@@ -74,6 +79,14 @@ export class FunctionType implements IEncodable {
                 this.Results.every((r, i) => r === other.Results[i]);
     }
 
+    public referred(other: FunctionType | string): boolean {
+        if (other instanceof FunctionType) { return other.isReference && this.Reference === other.Reference; }
+        return this.Reference === other;
+    }
+    public refer(other: FunctionType | string): boolean {
+        return this.isReference && (other instanceof FunctionType ? other.Reference : other) === other;
+    }
+
     public clone(): FunctionType { return new FunctionType(this.Parameters, this.Results); }
 
     public static decode(decoder: IDecoder): FunctionType {
@@ -82,6 +95,12 @@ export class FunctionType implements IEncodable {
             decoder.vector('uint8'),
             decoder.vector('uint8')
         )
+    }
+
+    public static refer(name: string): FunctionType {
+        name = '' + name
+        if (!name) { throw new Error('Invalid empty name for a function reference'); }
+        return new FunctionType([], [], name);
     }
 }
 
@@ -95,12 +114,8 @@ export class LimitType implements IEncodable {
     }
 
     public encode(encoder: IEncoder): void {
-        if (typeof(this.Max) !== 'undefined') {
-            encoder.uint8(0x01).uint32(this.Min).uint32(this.Max);
-        }
-        else {
-            encoder.uint8(0x00).uint32(this.Min);
-        }
+        if (typeof(this.Max) !== 'undefined') { encoder.uint8(0x01).uint32(this.Min).uint32(this.Max); }
+        else { encoder.uint8(0x00).uint32(this.Min); }
     }
 
     public static decode(decoder: IDecoder): LimitType {

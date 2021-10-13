@@ -1,15 +1,9 @@
-import { OpCodes, ForwardOpCodes } from '../OpCodes';
 import { protect } from '../internal';
+import { OpCodes, ForwardOpCodes } from '../OpCodes';
+import * as Types from './Types';
+import * as Sections from './Sections';
 import type { IEncodable, IDecodable, IDecoder, IEncoder } from './Encoder';
 import type { Module } from './Module';
-import {
-    ValueType,
-    Type,
-    FunctionType,
-    TableType,
-    ReferenceType
-} from './Types';
-import { GlobalVariable, ElementSegment, DataSegment } from './Sections';
 
 export class Expression implements IEncodable<Module> {
 
@@ -19,10 +13,37 @@ export class Expression implements IEncodable<Module> {
         protect(this, 'Instructions', instructions.slice(), true);
     }
 
+    public getDefinedTypes(): Types.FunctionType[] {
+        return this.Instructions
+                    .filter(i => i instanceof AbstractBlockInstruction)
+                    .map(i => (i as AbstractBlockInstruction).getDefinedTypes())
+                    .reduce((a, v) => (a.push(...v), a), []);
+    }
+
+    public getDefinedGlobals(): Sections.GlobalVariable[] {
+        let r = this.Instructions
+                    .filter(i => i instanceof GlobalVariableInstruction)
+                    .map(g => (g as GlobalVariableInstruction).Variable);
+        r.push(
+            ...this.Instructions
+                    .filter(i => i instanceof AbstractBlockInstruction)
+                    .map(i => (i as AbstractBlockInstruction).getDefinedGlobals())
+                    .reduce((a, v) => (a.push(...v), a), [])
+        );
+        return r;
+    }
+
     public encode(encoder: IEncoder, context: Module): void {
         encoder
             .array(this.Instructions, { module: context, blocks: [] })
             .uint8(OpCodes.end);
+    }
+
+    public evaluate(params: Types.ResultType): Passable<undefined, Types.ResultType>;
+    public evaluate<B extends boolean>(params: Types.ResultType, pass: B): Passable<B, Types.ResultType>;
+    public evaluate(params: Types.ResultType, pass?: boolean): Passable<typeof pass, Types.ResultType>;
+    public evaluate(params: Types.ResultType, pass?: boolean): Passable<typeof pass, Types.ResultType> {
+        return Instruction.resolveStack(this.Instructions, params, pass);
     }
     
     public static decode(decoder: IDecoder, context: Module): Expression {
@@ -34,24 +55,50 @@ export class Expression implements IEncodable<Module> {
     }
 }
 
+export type Passable<T extends boolean | undefined, R> = R | (T extends false | undefined ? never : null);
+export type ForwardInstruction<O extends ForwardOpCodes=ForwardOpCodes> = Instruction<OpCodes.look_forward> & { OperationCode: O };
+
 type Instructible<O extends OpCodes=OpCodes> = { instance: Instruction<O> } | IDecodable<Instruction<O>, [ ExpressionContext ]>;
-type ForwardInstruction<O extends ForwardOpCodes=ForwardOpCodes> = Instruction<OpCodes.look_forward> & { OperationCode: O };
 type ForwardInstructible<O extends ForwardOpCodes=ForwardOpCodes> = { instance: ForwardInstruction<O> } | IDecodable<ForwardInstruction<O>, [ ExpressionContext ]>;
 type ExpressionContext = { module: Module, blocks: AbstractBlockInstruction[] };
 type Ctor<I extends Instruction, Args extends any[]=[]> = { new(...args: Args): I };
+type StackEdit = [ null | Types.ResultType, null | Types.ResultType ];
 
 export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodable<ExpressionContext> {
     public readonly Code!: O;
-    protected constructor(code: O) { 
-        protect(this, 'Code', code, true);
-    }
+    public get stack(): StackEdit { return [ null, null ]; }
+    protected constructor(code: O) { protect(this, 'Code', code, true); }
     public getIndex(expression: Expression, pass?: boolean): number {
         let index = expression.Instructions.indexOf(this);
         if (!pass && index < 0) { throw new Error('Instruction not present in the current expression'); }
         return index;
     }
-    public encode(encoder: IEncoder, _: ExpressionContext): void {
-        encoder.uint8(this.Code);
+    public encode(encoder: IEncoder, _: ExpressionContext): void { encoder.uint8(this.Code); }
+
+    public evaluate(params: Types.ResultType): Passable<undefined, Types.ResultType>;
+    public evaluate<B extends boolean>(params: Types.ResultType, pass: B): Passable<B, Types.ResultType>;
+    public evaluate(params: Types.ResultType, pass?: boolean): Passable<typeof pass, Types.ResultType>;
+    public evaluate(params: Types.ResultType, pass?: boolean): Passable<typeof pass, Types.ResultType> {
+        if (!Array.isArray(params)) { throw new TypeError('First argument must be a ResultType (Array<ValueType>)'); }
+        let wrong!: [number, number];
+        if (params.some((n, i) => (wrong = [n, i], !Types.validValue(n)))) {
+            throw new TypeError('Invalid ValueType in params: 0x' + Number(wrong[0]).toString(16) + ' (index: ' + wrong[1] + ')');
+        }
+        let stack = this.stack;
+        let result = stack[0] === null || (
+                        stack[0].length === params.length &&
+                        stack[0].every((v, i) => v === params[i])
+                    ) ?
+                (stack[1] === null ? params : stack[1]) :
+                null;
+        if (!pass && !result) {
+            throw new Error(
+                'Can not resolve stack for ' + this.constructor.name +
+                ' with parameters [ ' + params.map(v => '0x' + Number(v).toString(16) +
+                ' (index: ' + Types.Type[v] + ')').join(', ') + ' ]'
+            );
+        }
+        return result;
     }
 
     private static readonly _instructionSet: { [key in OpCodes]?: Instructible } = { };
@@ -71,10 +118,50 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
         let code: OpCodes = decoder.uint8(), fwd: ForwardOpCodes = -1, ctor;
         if (code === OpCodes.look_forward) { ctor = Instruction._forwardSet[(fwd = decoder.uint32() as ForwardOpCodes)]; }
         ctor = Instruction._instructionSet[code];
-        if (!ctor) { throw new Error('Unsupported Instruction code: 0x' + code.toString(16) + (fwd >= 0 ? ' 0x' + fwd.toString(16) : '')); }
+        if (!ctor) { throw new Error('Unsupported Instruction code: 0x' + Number(code).toString(16) + (fwd >= 0 ? ' 0x' + Number(fwd).toString(16) : '')); }
         if ('instance' in ctor && ctor.instance instanceof Instruction) { return ctor.instance; }
         else if ('decode' in ctor && typeof(ctor.decode) === 'function') { return ctor.decode(decoder, context); }
-        else { throw new Error('Unsupported Instruction code: 0x' + code.toString(16) + (fwd >= 0 ? ' 0x' + fwd.toString(16) : '')); }
+        else { throw new Error('Unsupported Instruction code: 0x' + Number(code).toString(16) + (fwd >= 0 ? ' 0x' + Number(fwd).toString(16) : '')); }
+    }
+    public static resolveStack(instructions: Instruction[], params: Types.ResultType): Passable<undefined, Types.ResultType>
+    public static resolveStack<B extends boolean>(instructions: Instruction[], params: Types.ResultType, pass: B): Passable<B, Types.ResultType>
+    public static resolveStack(instructions: Instruction[], params: Types.ResultType, pass?: boolean): Passable<typeof pass, Types.ResultType>
+    public static resolveStack(instructions: Instruction[], params: Types.ResultType, pass?: boolean): Passable<typeof pass, Types.ResultType> {
+        if (!Array.isArray(instructions) || instructions.some(i => !(i instanceof Instruction))) {
+            throw new TypeError('Invalid argument: first argument must be an Array<Instruction>');
+        }
+        if (!instructions.length) { return params; }
+        let curr: Types.ResultType | null = params;
+        for (let instr of instructions) {
+            curr = instr.evaluate(curr, pass);
+            if (!curr) { break; }
+        } 
+        return curr;
+    }
+    public static checkStack(instructions: Instruction[], stack: Types.Stack): boolean;
+    public static checkStack(instructions: Instruction[], signature: Types.FunctionType): boolean;
+    public static checkStack(instructions: Instruction[], params: Types.ResultType, results: Types.ResultType): boolean;
+    public static checkStack(instructions: Instruction[], stack: Types.Stack | Types.ResultType | Types.FunctionType, results?: Types.ResultType): boolean {
+        if (stack instanceof Types.FunctionType) { stack = [ stack.Parameters, stack.Results ]; }
+        else if (Array.isArray(results)) { stack = [ stack as Types.ResultType, results ]; }
+        if (!Array.isArray(stack)) { throw new TypeError('Invalid argument: second argument must be of type Stack|FunctionType|ResultType'); }
+        if (!Array.isArray(stack[0]) || !Array.isArray(stack[1])) {
+            throw new TypeError(
+                'Argument mismatch: the signature is checkStack(Array<Instruction>, Stack|FunctionType) | '+
+                'checkStack(Array<Instruction>, ResultType, ResultType)'
+            );
+        }
+        let wrong!: [ boolean, number, number ];
+        if (stack.some((s, x) => (s as Types.ResultType).some((v, i) => (wrong = [ !!x, v, i ], !Types.validValue(v))))) {
+            throw new TypeError(
+                'Invalid ValueType in ' + (wrong[0] ? 'Results' : 'Parameters') +
+                ': 0x' + Number(wrong[1]).toString(16) + ' (index: ' + wrong[2] + ')'
+            );
+        }
+        let result = this.resolveStack(instructions, stack[0], true);
+        let expected = stack[1];
+        return result && result.length == expected.length &&
+                result.every((v, i) => v === expected[i]) || false;
     }
 }
 
@@ -93,7 +180,7 @@ export class NopInstruction extends ControlInstruction<OpCodes.nop> {
 NopInstruction.registerInstruction(OpCodes.nop);
 
 export const EmptyBlock = 0x40;
-export type BlockType = null | ValueType | FunctionType;
+export type BlockType = null | Types.ValueType | Types.FunctionType;
 export type BlockInstructionCodes = OpCodes.block | OpCodes.loop | OpCodes.if;
 export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=BlockInstructionCodes> extends ControlInstruction<O> {
     public Type: BlockType;
@@ -103,6 +190,27 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         super(code);
         this.Type = block || null;
         protect(this, 'Block', instructions.slice(), true);
+    }
+
+    public getDefinedTypes(): Types.FunctionType[] {
+        let result = this.Block
+                        .filter(i => i instanceof AbstractBlockInstruction)
+                        .map(b => (b as AbstractBlockInstruction).getDefinedTypes())
+                        .reduce((a, v) => (a.push(...v), a), []);
+        if (this.Type instanceof Types.FunctionType) { result.unshift(this.Type); }
+        return result;
+    }
+    public getDefinedGlobals(): Sections.GlobalVariable[] {
+        let r = this.Block
+                    .filter(i => i instanceof GlobalVariableInstruction)
+                    .map(g => (g as GlobalVariableInstruction).Variable);
+        r.push(
+            ...this.Block
+                    .filter(i => i instanceof AbstractBlockInstruction)
+                    .map(i => (i as AbstractBlockInstruction).getDefinedGlobals())
+                    .reduce((a, v) => (a.push(...v), a), [])
+        );
+        return r;
     }
 
     public getLabel(relative: AbstractBranchInstruction, pass?: boolean) {
@@ -119,8 +227,8 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
     protected encodeOpen(encoder: IEncoder, context: ExpressionContext): void {
         super.encode(encoder, context);
         if (!this.Type) { encoder.uint8(EmptyBlock); }
-        else if (this.Type instanceof FunctionType) {
-            let index = context.module.TypeSection.Types.indexOf(this.Type);
+        else if (this.Type instanceof Types.FunctionType) {
+            let index = context.module.TypeSection.indexOf(this.Type);
             if (index < 0) { throw new Error('Invalid Block Type type reference'); }
             encoder.int32(index);
         }
@@ -144,7 +252,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
     protected decodeType(decoder: IDecoder, context: ExpressionContext): BlockType {
         let header = decoder.peek(), block;
         if (header === EmptyBlock) { block = null; decoder.uint8(); }
-        else if (header in Type) { block = header; decoder.uint8(); }
+        else if (header in Types.Type) { block = header; decoder.uint8(); }
         else {
             let index = decoder.int32();
             if (!context.module.TypeSection.Types[index]) {
@@ -187,11 +295,11 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
 }
 
 export class BlockInstruction extends AbstractBlockInstruction<OpCodes.block> {
-    private constructor(block?: BlockType, instructions: Instruction[]=[]) { super(OpCodes.block, block, instructions); }
+    public constructor(block?: BlockType, instructions: Instruction[]=[]) { super(OpCodes.block, block, instructions); }
 }
 BlockInstruction.registerInstruction(OpCodes.block);
 export class LoopInstruction extends AbstractBlockInstruction<OpCodes.loop> {
-    private constructor(block?: BlockType, instructions: Instruction[]=[]) { super(OpCodes.loop, block, instructions); }
+    public constructor(block?: BlockType, instructions: Instruction[]=[]) { super(OpCodes.loop, block, instructions); }
 }
 LoopInstruction.registerInstruction(OpCodes.loop);
 export class IfThenElseInstruction extends AbstractBlockInstruction<OpCodes.if> {
@@ -200,6 +308,22 @@ export class IfThenElseInstruction extends AbstractBlockInstruction<OpCodes.if> 
     public constructor(thenType?: BlockType, then: Instruction[] = [], elseBlock: Instruction[]=[]) {
         super(OpCodes.if, thenType, then);
         protect(this, 'Else', elseBlock.slice(), true);
+    }
+
+    public override getDefinedTypes(): Types.FunctionType[] {
+        let result = []
+        result.push(
+            ...this.Block
+            .filter(i => i instanceof AbstractBlockInstruction)
+            .map(b => (b as AbstractBlockInstruction).getDefinedTypes())
+            .reduce((a, v) => (a.push(...v), a), []),
+            ...this.Else
+            .filter(i => i instanceof AbstractBlockInstruction)
+            .map(b => (b as AbstractBlockInstruction).getDefinedTypes())
+            .reduce((a, v) => (a.push(...v), a), [])
+        );
+        if (this.Type instanceof Types.FunctionType) { result.unshift(this.Type); }
+        return result;
     }
 
     public override encodeBlock(encoder: IEncoder, context: ExpressionContext): void {
@@ -294,10 +418,10 @@ export type CallInstructionCodes = OpCodes.call | OpCodes.call_indirect;
 export abstract class AbstractCallInstruction<O extends CallInstructionCodes=CallInstructionCodes> extends ControlInstruction<O> { }
 
 export class CallInstruction extends AbstractCallInstruction<OpCodes.call> {
-    public Function: FunctionType;
-    public constructor(fn: FunctionType) { super(OpCodes.call); this.Function = fn; }
+    public Function: Types.FunctionType;
+    public constructor(fn: Types.FunctionType) { super(OpCodes.call); this.Function = fn; }
     public getFunctionIndex(context: ExpressionContext, pass?: boolean): number {
-        let index = context.module.FunctionSection.Functions.indexOf(this.Function);
+        let index = context.module.FunctionSection.indexOf(this.Function);
         if(!pass && index < 0) { throw new Error('Call Instruction invalid function reference'); }
         return index;
     }
@@ -315,15 +439,15 @@ export class CallInstruction extends AbstractCallInstruction<OpCodes.call> {
 CallInstruction.registerInstruction(OpCodes.call);
 
 export class CallIndirectInstruction extends AbstractCallInstruction<OpCodes.call_indirect> {
-    public Type: FunctionType;
-    public Table: TableType;
-    public constructor(fn: FunctionType, table: TableType) {
+    public Type: Types.FunctionType;
+    public Table: Types.TableType;
+    public constructor(fn: Types.FunctionType, table: Types.TableType) {
         super(OpCodes.call_indirect);
         this.Type = fn;
         this.Table = table;
     }
     public getTypeIndex(context: ExpressionContext, pass?: boolean): number {
-        let index = context.module.TypeSection.Types.indexOf(this.Type);
+        let index = context.module.TypeSection.indexOf(this.Type);
         if(!pass && index < 0) { throw new Error('Call Indirect Instruction invalid type reference'); }
         return index;
     }
@@ -355,8 +479,8 @@ export type ReferenceInstructionCodes = OpCodes.ref_null | OpCodes.ref_func | Op
 export abstract class ReferenceInstruction<O extends ReferenceInstructionCodes=ReferenceInstructionCodes> extends Instruction<O> { }
 
 export class ReferenceNullInstruction extends ReferenceInstruction<OpCodes.ref_null> {
-    public Type: ReferenceType;
-    public constructor(type: ReferenceType) { super(OpCodes.ref_null); this.Type = type; }
+    public Type: Types.ReferenceType;
+    public constructor(type: Types.ReferenceType) { super(OpCodes.ref_null); this.Type = type; }
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
         super.encode(encoder, context);
         encoder.uint8(this.Type);
@@ -364,6 +488,8 @@ export class ReferenceNullInstruction extends ReferenceInstruction<OpCodes.ref_n
     public static override decode(decoder: IDecoder, _?: ExpressionContext): ReferenceNullInstruction {
         return new ReferenceNullInstruction(decoder.uint8());
     }
+    public static readonly FunctionRef = new ReferenceNullInstruction(Types.Type.funcref); 
+    public static readonly ExternalRef = new ReferenceNullInstruction(Types.Type.externref); 
 }
 ReferenceNullInstruction.registerInstruction(OpCodes.ref_null);
 export class ReferenceIsNullInstruction extends ReferenceInstruction<OpCodes.ref_is_null> {
@@ -373,10 +499,10 @@ export class ReferenceIsNullInstruction extends ReferenceInstruction<OpCodes.ref
 ReferenceIsNullInstruction.registerInstruction(OpCodes.ref_is_null);
 
 export class ReferenceFunctionInstruction extends ReferenceInstruction<OpCodes.ref_func> {
-    public Function: FunctionType;
-    public constructor(fn: FunctionType) { super(OpCodes.ref_func); this.Function = fn; }
+    public Function: Types.FunctionType;
+    public constructor(fn: Types.FunctionType) { super(OpCodes.ref_func); this.Function = fn; }
     public getFunctionIndex(context: ExpressionContext, pass?: boolean): number {
-        let index = context.module.FunctionSection.Functions.indexOf(this.Function);
+        let index = context.module.FunctionSection.indexOf(this.Function);
         if(!pass && index < 0) { throw new Error('Reference Instruction invalid function reference'); }
         return index;
     }
@@ -408,8 +534,8 @@ export class SelectInstruction extends ParametricInstruction<OpCodes.select> {
 SelectInstruction.registerInstruction(OpCodes.select);
 
 export class SelectAllInstruction extends ParametricInstruction<OpCodes.select_t> {
-    public readonly Values!: ValueType[];
-    public constructor(values: ValueType[]) { super(OpCodes.select_t); protect(this, 'Values', values.slice(), true); }
+    public readonly Values!: Types.ValueType[];
+    public constructor(values: Types.ValueType[]) { super(OpCodes.select_t); protect(this, 'Values', values.slice(), true); }
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
         super.encode(encoder, context);
         encoder.vector(this.Values, 'uint32');
@@ -452,8 +578,8 @@ LocalTeeInstruction.registerInstruction(OpCodes.local_tee);
 export type GlobalVariableInstructionCodes = OpCodes.global_get | OpCodes.global_set;
 export abstract class GlobalVariableInstruction<O extends GlobalVariableInstructionCodes=GlobalVariableInstructionCodes>
     extends AbstractVariableInstruction<O> {
-    public Variable: GlobalVariable;
-    protected constructor(code: O, variable: GlobalVariable) { super(code); this.Variable = variable; }
+    public Variable: Sections.GlobalVariable;
+    protected constructor(code: O, variable: Sections.GlobalVariable) { super(code); this.Variable = variable; }
     public getVariableIndex(context: ExpressionContext, pass?: boolean): number {
         let index = context.module.GlobalSection.Globals.indexOf(this.Variable);
         if (!pass && index < 0) { throw new Error('Global Variable Instruction invalid variable reference'); }
@@ -466,19 +592,19 @@ export abstract class GlobalVariableInstruction<O extends GlobalVariableInstruct
     }
 
     public static override decode(
-        this: Ctor<GlobalVariableInstruction, [ GlobalVariable ]>,
+        this: Ctor<GlobalVariableInstruction, [ Sections.GlobalVariable ]>,
         decoder: IDecoder,
         context: ExpressionContext
     ): GlobalVariableInstruction {
-        return new this(decoder.decode(GlobalVariable, context.module));
+        return new this(decoder.decode(Sections.GlobalVariable, context.module));
     }
 }
 export class GlobalGetInstruction extends GlobalVariableInstruction<OpCodes.global_get> {
-    public constructor(variable: GlobalVariable) { super(OpCodes.global_get, variable); }
+    public constructor(variable: Sections.GlobalVariable) { super(OpCodes.global_get, variable); }
 }
 GlobalGetInstruction.registerInstruction(OpCodes.global_get);
 export class GlobalSetInstruction extends GlobalVariableInstruction<OpCodes.global_set> {
-    public constructor(variable: GlobalVariable) { super(OpCodes.global_set, variable); }
+    public constructor(variable: Sections.GlobalVariable) { super(OpCodes.global_set, variable); }
 }
 GlobalSetInstruction.registerInstruction(OpCodes.global_set);
 
@@ -500,8 +626,8 @@ export type TableInstructionForwardCodes = ForwardOpCodes.table_copy | ForwardOp
                                             ForwardOpCodes.table_init | ForwardOpCodes.table_size | ForwardOpCodes.elem_drop;
 export abstract class TableInstruction<O extends TableInstructionForwardCodes=TableInstructionForwardCodes> extends AbstractTableInstruction<OpCodes.look_forward> {
     public readonly OperationCode!: O;
-    public Table: TableType;
-    protected constructor(code: O, table: TableType) {
+    public Table: Types.TableType;
+    protected constructor(code: O, table: Types.TableType) {
         super(OpCodes.look_forward);
         protect(this, 'OperationCode', code, true);
         this.Table = table;
@@ -517,8 +643,8 @@ export abstract class TableInstruction<O extends TableInstructionForwardCodes=Ta
     }
 }
 export class TableInitInstruction extends TableInstruction<ForwardOpCodes.table_init> {
-    public Element: ElementSegment;
-    public constructor(table: TableType, element: ElementSegment) { super(ForwardOpCodes.table_init, table); this.Element = element; }
+    public Element: Sections.ElementSegment;
+    public constructor(table: Types.TableType, element: Sections.ElementSegment) { super(ForwardOpCodes.table_init, table); this.Element = element; }
     public getElementIndex(context: ExpressionContext, pass?: boolean): number {
         let index = context.module.ElementSection.Elements.indexOf(this.Element);
         if(!pass && index < 0) { throw new Error('Table Init Instruction invalid element reference'); }
@@ -543,8 +669,8 @@ export class TableInitInstruction extends TableInstruction<ForwardOpCodes.table_
 }
 TableInitInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.table_init);
 export class ElementDropInstruction extends TableInstruction<ForwardOpCodes.elem_drop> {
-    public Element: ElementSegment;
-    public constructor(element: ElementSegment) {
+    public Element: Sections.ElementSegment;
+    public constructor(element: Sections.ElementSegment) {
         super(ForwardOpCodes.elem_drop, null as any);
         this.Element = element;
     }
@@ -566,10 +692,10 @@ export class ElementDropInstruction extends TableInstruction<ForwardOpCodes.elem
 }
 ElementDropInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.elem_drop);
 export class TableCopyInstruction extends TableInstruction<ForwardOpCodes.table_copy> {
-    public Destination: TableType;
-    public get Source(): TableType { return this.Table; }
-    public set Source(value: TableType) { this.Table = value; }
-    public constructor(table: TableType, destination: TableType) {
+    public Destination: Types.TableType;
+    public get Source(): Types.TableType { return this.Table; }
+    public set Source(value: Types.TableType) { this.Table = value; }
+    public constructor(table: Types.TableType, destination: Types.TableType) {
         super(ForwardOpCodes.table_copy, table);
         this.Destination = destination;
     }
@@ -604,7 +730,7 @@ export abstract class TableOpInstruction<O extends TableOpInstructionCodes=Table
         encoder.uint32(index);
     }
     public static override decode(
-        this: Ctor<TableOpInstruction, [ TableType ]>,
+        this: Ctor<TableOpInstruction, [ Types.TableType ]>,
         decoder: IDecoder,
         context: ExpressionContext
     ): TableOpInstruction {
@@ -614,16 +740,16 @@ export abstract class TableOpInstruction<O extends TableOpInstructionCodes=Table
     }
 }
 export class TableGrowInstruction extends TableOpInstruction<ForwardOpCodes.table_grow> {
-    public constructor(table: TableType) { super(ForwardOpCodes.table_grow, table); }
+    public constructor(table: Types.TableType) { super(ForwardOpCodes.table_grow, table); }
 }
 TableGrowInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.table_grow);
 export class TableSizeInstruction extends TableOpInstruction<ForwardOpCodes.table_size> {
-    public constructor(table: TableType) { super(ForwardOpCodes.table_size, table); }
+    public constructor(table: Types.TableType) { super(ForwardOpCodes.table_size, table); }
 }
 TableSizeInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.table_size);
 
 export class TableFillInstruction extends TableOpInstruction<ForwardOpCodes.table_fill> {
-    public constructor(table: TableType) { super(ForwardOpCodes.table_fill, table); }
+    public constructor(table: Types.TableType) { super(ForwardOpCodes.table_fill, table); }
 }
 TableFillInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.table_fill);
 
@@ -801,8 +927,8 @@ MemoryGrowInstruction.registerInstruction(OpCodes.memory_grow);
 
 export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.look_forward> {
     public readonly OperationCode!: ForwardOpCodes.memory_init;
-    public Data: DataSegment;
-    public constructor(data: DataSegment) {
+    public Data: Sections.DataSegment;
+    public constructor(data: Sections.DataSegment) {
         super(OpCodes.look_forward);
         protect(this, 'OperationCode', ForwardOpCodes.memory_init, true);
         this.Data = data;
@@ -822,15 +948,15 @@ export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.loo
         let index = decoder.uint32();
         if (!context.module.DataSection.Datas[index]) { throw new Error('Memory Init Instruction invalid data reference'); }
         let b;
-        if ((b = decoder.uint8()) !== 0x00) { throw new Error('Memory Init Instruction unexpected closing byte: 0x' + b.toString(16)); }
+        if ((b = decoder.uint8()) !== 0x00) { throw new Error('Memory Init Instruction unexpected closing byte: 0x' + Number(b).toString(16)); }
         return new MemoryInitInstruction(context.module.DataSection.Datas[index]!)
     }
 }
 MemoryInitInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.memory_init);
 export class DataDropInstruction extends AbstractMemoryInstruction<OpCodes.look_forward> {
     public readonly OperationCode!: ForwardOpCodes.data_drop;
-    public Data: DataSegment;
-    public constructor(data: DataSegment) {
+    public Data: Sections.DataSegment;
+    public constructor(data: Sections.DataSegment) {
         super(OpCodes.look_forward);
         protect(this, 'OperationCode', ForwardOpCodes.data_drop, true);
         this.Data = data;
@@ -1588,46 +1714,46 @@ export abstract class NumericTruncateInstruction<O extends NumericTruncateInstru
         encoder.uint32(this.OperationCode)
     }
 }
-export class I32TruncateSatF32SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f32_s> {
+export class I32TruncateSaturationF32SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f32_s> {
     private constructor() { super(ForwardOpCodes.i32_trunc_sat_f32_s); }
-    public static readonly instance = new I32TruncateSatF32SignedInstruction();
+    public static readonly instance = new I32TruncateSaturationF32SignedInstruction();
 }
-I32TruncateSatF32SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f32_s);
-export class I32TruncateSatF64SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f64_s> {
+I32TruncateSaturationF32SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f32_s);
+export class I32TruncateSaturationF64SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f64_s> {
     private constructor() { super(ForwardOpCodes.i32_trunc_sat_f64_s); }
-    public static readonly instance = new I32TruncateSatF64SignedInstruction();
+    public static readonly instance = new I32TruncateSaturationF64SignedInstruction();
 }
-I32TruncateSatF64SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f64_s);
-export class I32TruncateSatF32UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f32_u> {
+I32TruncateSaturationF64SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f64_s);
+export class I32TruncateSaturationF32UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f32_u> {
     private constructor() { super(ForwardOpCodes.i32_trunc_sat_f32_u); }
-    public static readonly instance = new I32TruncateSatF32UnsignedInstruction();
+    public static readonly instance = new I32TruncateSaturationF32UnsignedInstruction();
 }
-I32TruncateSatF32UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f32_u);
-export class I32TruncateSatF64UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f64_u> {
+I32TruncateSaturationF32UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f32_u);
+export class I32TruncateSaturationF64UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f64_u> {
     private constructor() { super(ForwardOpCodes.i32_trunc_sat_f64_u); }
-    public static readonly instance = new I32TruncateSatF64UnsignedInstruction();
+    public static readonly instance = new I32TruncateSaturationF64UnsignedInstruction();
 }
-I32TruncateSatF64UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f64_u);
-export class I64TruncateSatF32SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f32_s> {
+I32TruncateSaturationF64UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f64_u);
+export class I64TruncateSaturationF32SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f32_s> {
     private constructor() { super(ForwardOpCodes.i64_trunc_sat_f32_s); }
-    public static readonly instance = new I64TruncateSatF32SignedInstruction();
+    public static readonly instance = new I64TruncateSaturationF32SignedInstruction();
 }
-I64TruncateSatF32SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f32_s);
-export class I64TruncateSatF64SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f64_s> {
+I64TruncateSaturationF32SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f32_s);
+export class I64TruncateSaturationF64SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f64_s> {
     private constructor() { super(ForwardOpCodes.i64_trunc_sat_f64_s); }
-    public static readonly instance = new I64TruncateSatF64SignedInstruction();
+    public static readonly instance = new I64TruncateSaturationF64SignedInstruction();
 }
-I64TruncateSatF64SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f64_s);
-export class I64TruncateSatF32UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f32_u> {
+I64TruncateSaturationF64SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f64_s);
+export class I64TruncateSaturationF32UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f32_u> {
     private constructor() { super(ForwardOpCodes.i64_trunc_sat_f32_u); }
-    public static readonly instance = new I64TruncateSatF32UnsignedInstruction();
+    public static readonly instance = new I64TruncateSaturationF32UnsignedInstruction();
 }
-I64TruncateSatF32UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f32_u);
-export class I64TruncateSatF64UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f64_u> {
+I64TruncateSaturationF32UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f32_u);
+export class I64TruncateSaturationF64UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f64_u> {
     private constructor() { super(ForwardOpCodes.i64_trunc_sat_f64_u); }
-    public static readonly instance = new I64TruncateSatF64UnsignedInstruction();
+    public static readonly instance = new I64TruncateSaturationF64UnsignedInstruction();
 }
-I64TruncateSatF64UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f64_u);
+I64TruncateSaturationF64UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f64_u);
 
 
 export const NumericInstruction = {
@@ -1662,8 +1788,8 @@ export const NumericInstruction = {
             Truncate: {
                 F32: I32TruncateF32SignedInstruction.instance,
                 F64: I32TruncateF64SignedInstruction.instance,
-                SatF32: I32TruncateSatF32SignedInstruction,
-                SatF64: I32TruncateSatF64SignedInstruction,
+                SatF32: I32TruncateSaturationF32SignedInstruction,
+                SatF64: I32TruncateSaturationF64SignedInstruction,
             }
         },
         Unsigned: {
@@ -1677,8 +1803,8 @@ export const NumericInstruction = {
             Truncate: {
                 F32: I32TruncateF32UnsignedInstruction.instance,
                 F64: I32TruncateF64UnsignedInstruction.instance,
-                SatF32: I32TruncateSatF32UnsignedInstruction,
-                SatF64: I32TruncateSatF64UnsignedInstruction,
+                SatF32: I32TruncateSaturationF32UnsignedInstruction,
+                SatF64: I32TruncateSaturationF64UnsignedInstruction,
             }
         }
     },
@@ -1716,8 +1842,8 @@ export const NumericInstruction = {
             Truncate: {
                 F32: I64TruncateF32SignedInstruction.instance,
                 F64: I64TruncateF64SignedInstruction.instance,
-                SatF32: I64TruncateSatF32SignedInstruction,
-                SatF64: I64TruncateSatF64SignedInstruction,
+                SatF32: I64TruncateSaturationF32SignedInstruction,
+                SatF64: I64TruncateSaturationF64SignedInstruction,
             }
         },
         Unsigned: {
@@ -1732,8 +1858,8 @@ export const NumericInstruction = {
             Truncate: {
                 F32: I64TruncateF32UnsignedInstruction.instance,
                 F64: I64TruncateF64UnsignedInstruction.instance,
-                SatF32: I64TruncateSatF32UnsignedInstruction,
-                SatF64: I64TruncateSatF64UnsignedInstruction,
+                SatF32: I64TruncateSaturationF32UnsignedInstruction,
+                SatF64: I64TruncateSaturationF64UnsignedInstruction,
             }
         },
     },
@@ -1852,7 +1978,7 @@ export const AllInstructionsTypes = [
     F64MultiplyInstruction, F64DivideInstruction, F64MinInstruction, F64MaxInstruction,
     F64CopySignInstruction, F64ConvertI32SignedInstruction, F64ConvertI32UnsignedInstruction,
     F64ConvertI64SignedInstruction, F64ConvertI64UnsignedInstruction, F64PromoteF32Instruction,
-    F64ReinterpretI64Instruction, I32TruncateSatF32SignedInstruction, I32TruncateSatF64SignedInstruction,
-    I32TruncateSatF32UnsignedInstruction, I32TruncateSatF64UnsignedInstruction, I64TruncateSatF32SignedInstruction,
-    I64TruncateSatF64SignedInstruction, I64TruncateSatF32UnsignedInstruction, I64TruncateSatF64UnsignedInstruction
+    F64ReinterpretI64Instruction, I32TruncateSaturationF32SignedInstruction, I32TruncateSaturationF64SignedInstruction,
+    I32TruncateSaturationF32UnsignedInstruction, I32TruncateSaturationF64UnsignedInstruction, I64TruncateSaturationF32SignedInstruction,
+    I64TruncateSaturationF64SignedInstruction, I64TruncateSaturationF32UnsignedInstruction, I64TruncateSaturationF64UnsignedInstruction
 ];
