@@ -4,7 +4,7 @@ import type { IEncodable, IDecodable, IDecoder, IEncoder } from './Encoder';
 import type { Module } from './Module';
 import {
     ValueType,
-    Types,
+    Type,
     FunctionType,
     TableType,
     ReferenceType
@@ -61,7 +61,7 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
     public static registerInstruction<O extends ForwardOpCodes>(this: ForwardInstructible<O>, key: OpCodes.look_forward, forward: O): void;
     public static registerInstruction(this: Instructible | ForwardInstructible, key: OpCodes, forward?: ForwardOpCodes): void {
         if (key === OpCodes.look_forward) {
-            if (!((forward || -1) in ForwardOpCodes)) { throw new Error('Invalid forward code 0x' + Number(forward).toString(16)); }
+            if (!((typeof(forward) === 'undefined' ? -1 : forward) in ForwardOpCodes)) { throw new Error('Invalid forward code 0x' + Number(forward).toString(16)); }
             Instruction._forwardSet[forward!] = this as ForwardInstructible;
         }
         else if (!(key in OpCodes)) { throw new Error('Invalid opcode 0x' + Number(key).toString(16)); }
@@ -144,7 +144,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
     protected decodeType(decoder: IDecoder, context: ExpressionContext): BlockType {
         let header = decoder.peek(), block;
         if (header === EmptyBlock) { block = null; decoder.uint8(); }
-        else if (header in Types) { block = header; decoder.uint8(); }
+        else if (header in Type) { block = header; decoder.uint8(); }
         else {
             let index = decoder.int32();
             if (!context.module.TypeSection.Types[index]) {

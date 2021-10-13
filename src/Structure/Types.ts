@@ -1,7 +1,7 @@
 import { protect } from '../internal';
 import { IEncoder, IDecoder, IEncodable } from './Encoder';
 
-export enum Types {
+export enum Type {
     const               = 0x00,
     limits_min          = 0x00,
     limits_min_max      = 0x01,
@@ -15,10 +15,40 @@ export enum Types {
     externref           = 0x6f,
 }
 
-export type NumberType = Types.i32 | Types.i64 | Types.f32 | Types.f64;
-export type ReferenceType = Types.funcref | Types.externref;
+export type NumberType = Type.i32 | Type.i64 | Type.f32 | Type.f64;
+export type ReferenceType = Type.funcref | Type.externref;
 export type ValueType = NumberType | ReferenceType;
 export type ResultType = ValueType[];
+export type MutableType = Type.const | Type.var;
+
+export type TypesKey<T extends Type=Type> = {
+    [K in keyof typeof Type]: (typeof Type)[K] extends T ? K : never;
+}[keyof typeof Type]
+
+export type ValueTypeKey = TypesKey<ValueType>;
+export type ReferenceTypeKey = TypesKey<ReferenceType>;
+export type NumberTypeKey = TypesKey<NumberType>;
+export type MutableTypeKey = TypesKey<MutableType>;
+
+export const NumberTypeValues: NumberType[] = [ Type.i32, Type.i64, Type.f32, Type.f64 ];
+export const ReferenceTypeValues: ReferenceType[] = [ Type.funcref, Type.externref ];
+export const ValueTypeValues: ValueType[] = [ ...NumberTypeValues, ...ReferenceTypeValues ];
+export const MutableTypeValues: MutableType[] = [ Type.const, Type.var ];
+
+export const NumberTypeKeys = NumberTypeValues.map(v => Type[v]! as NumberTypeKey);
+export const ReferenceTypeKeys = ReferenceTypeValues.map(v => Type[v]! as ReferenceTypeKey);
+export const ValueTypeKeys = ValueTypeValues.map(v => Type[v]! as ValueTypeKey);
+export const MutableTypeKeys = MutableTypeValues.map(v => Type[v]! as MutableTypeKey);
+
+export function validNumber(target: any): target is NumberType { return typeof(target) === 'number' && NumberTypeValues.indexOf(target) >= 0; }
+export function validReference(target: any): target is ReferenceType { return typeof(target) === 'number' && ReferenceTypeValues.indexOf(target) >= 0; }
+export function validValue(target: any): target is ValueType { return typeof(target) === 'number' && ValueTypeValues.indexOf(target) >= 0; }
+export function validMutable(target: any): target is MutableType { return typeof(target) === 'number' && MutableTypeValues.indexOf(target) >= 0; }
+
+export function validNumberKey(target: string): target is NumberTypeKey { return typeof(target) === 'string' && NumberTypeKeys.indexOf(target as any) >= 0; }
+export function validReferenceKey(target: string): target is ReferenceTypeKey { return typeof(target) === 'string' && ReferenceTypeKeys.indexOf(target as any) >= 0; }
+export function validValueKey(target: string): target is ValueTypeKey { return typeof(target) === 'string' && ValueTypeKeys.indexOf(target as any) >= 0; }
+export function validMutableKey(target: string): target is MutableTypeKey { return typeof(target) === 'string' && MutableTypeKeys.indexOf(target as any) >= 0; }
 
 export class FunctionType implements IEncodable {
     public readonly Parameters!: ResultType;
@@ -31,7 +61,7 @@ export class FunctionType implements IEncodable {
 
     public encode(encoder: IEncoder): void {
         encoder
-            .uint8(Types.func)
+            .uint8(Type.func)
             .vector(this.Parameters, 'uint8')
             .vector(this.Results, 'uint8')
         ;
@@ -47,7 +77,7 @@ export class FunctionType implements IEncodable {
     public clone(): FunctionType { return new FunctionType(this.Parameters, this.Results); }
 
     public static decode(decoder: IDecoder): FunctionType {
-        if (decoder.uint8() != Types.func) { throw new Error('Invalid func type'); }
+        if (decoder.uint8() != Type.func) { throw new Error('Invalid func type'); }
         return new FunctionType(
             decoder.vector('uint8'),
             decoder.vector('uint8')
@@ -82,6 +112,7 @@ export class LimitType implements IEncodable {
     }
 }
 export type MemoryType = LimitType;
+export const MemoryType = LimitType;
 
 export class TableType implements IEncodable {
     public Reference: ReferenceType;
@@ -102,8 +133,6 @@ export class TableType implements IEncodable {
         return new TableType(ref, limit.Min, limit.Max);
     }
 }
-
-export type MutableType = Types.const | Types.var;
 
 export class GlobalType implements IEncodable {
     public Constant: boolean;
@@ -128,6 +157,6 @@ export class GlobalType implements IEncodable {
     }
 }
 
-export type ExternalTypes = Types.func | TableType | MemoryType | GlobalType;
+export type ExternalTypes = Type.func | TableType | MemoryType | GlobalType;
 
-export type IBinaryType = Types | FunctionType | LimitType | TableType | GlobalType;
+export type IBinaryType = Type | FunctionType | LimitType | TableType | GlobalType;

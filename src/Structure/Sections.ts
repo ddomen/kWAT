@@ -156,7 +156,7 @@ export class MemorySection extends Section<SectionTypes.memory> {
 
     public override decode(decoder: IDecoder) {
         this.Memories.length = 0;
-        this.Memories.push(...decoder.vector(Types.LimitType));
+        this.Memories.push(...decoder.vector(Types.MemoryType));
     }
 }
 
@@ -869,12 +869,12 @@ export class CodeSegment implements IEncodable<Module> {
             throw new Error('Invalid Code Segment body length');
         }
         let nLocals = decoder.uint32();
-        let locals: Types.Types[] = [], n, l;
+        let locals: Types.Type[] = [], n, l;
         for (let i = 0; i < nLocals; ++i) {
             n = decoder.uint32();
             for (let j = 0; j < n; ++j) {
                 l = decoder.uint8();
-                if (!(l in Types.Types)) { throw new Error('Invalid Code Segment Local Type'); }
+                if (!(l in Types.Type)) { throw new Error('Invalid Code Segment Local Type'); }
                 locals.push(l);
             }
         }

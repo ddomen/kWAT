@@ -2,16 +2,7 @@ import * as Types from './Types';
 import * as Sections from './Sections';
 import * as Expression from './Expression';
 
-type ValueTypeKeys = {
-    [K in keyof typeof Types.Types]:
-    (typeof Types.Types)[K] extends Types.ValueType ? K : never;
-}[keyof typeof Types.Types]
-
 type Exprimible<I extends Expression.Instruction=Expression.Instruction> = I | { instance: I };
-
-const numberTypes = [ Types.Types.i32, Types.Types.i64, Types.Types.f32, Types.Types.f64 ];
-const referenteTypes = [ Types.Types.funcref, Types.Types.externref ];
-const valueTypes = [ ...numberTypes, ...referenteTypes ];
 
 export interface IBuilder<T> { build(): T; }
 export type BuildingCallback<B extends IBuilder<any>> = (builder: B) => B;
@@ -41,21 +32,21 @@ export class FunctionBuilder implements IBuilder<FunctionDefinition> {
     public exportAs(exported: string | null): this { this._exported = exported || ''; return this; }
     public removeExport(): this { this._exported = ''; return this; }
 
-    public addParameter(type: Types.ValueType | ValueTypeKeys): this {
-        if (typeof(type) === 'string') { type = Types.Types[type] || type; }
-        if (valueTypes.indexOf(type) < 0) { throw new Error('Invalid parameter Type: ' + type); }
+    public addParameter(type: Types.ValueType | Types.ValueTypeKey): this {
+        if (typeof(type) === 'string') { type = Types.Type[type] || type; }
+        if (!Types.validValue(type)) { throw new Error('Invalid parameter Type: ' + type); }
         this._parameters.push(type);
         return this;
     }
-    public addResult(type: Types.ValueType | ValueTypeKeys): this {
-        if (typeof(type) === 'string') { type = Types.Types[type] || type; }
-        if (valueTypes.indexOf(type) < 0) { throw new Error('Invalid result Type: ' + type); }
+    public addResult(type: Types.ValueType | Types.ValueTypeKey): this {
+        if (typeof(type) === 'string') { type = Types.Type[type] || type; }
+        if (!Types.validValue(type)) { throw new Error('Invalid result Type: ' + type); }
         this._results.push(type);
         return this;
     }
-    public addLocal(name: string, type: Types.ValueType | ValueTypeKeys): this {
-        if (typeof(type) === 'string') { type = Types.Types[type] || type; }
-        if (valueTypes.indexOf(type) < 0) { throw new Error('Invalid local Type: ' + type); }
+    public addLocal(name: string, type: Types.ValueType | Types.ValueTypeKey): this {
+        if (typeof(type) === 'string') { type = Types.Type[type] || type; }
+        if (!Types.validValue(type)) { throw new Error('Invalid local Type: ' + type); }
         this._locals.push({ name, type });
         return this;
     }
@@ -113,10 +104,20 @@ export class ExpressionBuilder implements IBuilder<Expression.Expression> {
         return this;
     }
 
-    public constI32(value: number): this {
-        this._instructions.push(new Expression.I32ConstInstruction(value));
-        return this;
+    public const(value: number, type: Types.NumberType | Types.NumberTypeKey = Types.Type.i32): this {
+        if (typeof(type) === 'string') { type = Types.Type[type]; }
+        switch (type) {
+            case Types.Type.i32: return this.constI32(value);
+            case Types.Type.i64: return this.const(value);
+            case Types.Type.f32: return this.const(value);
+            case Types.Type.f64: return this.const(value);
+            default: throw new Error('Invalid const type');
+        }
     }
+    public constI32(value: number): this { this._instructions.push(new Expression.I32ConstInstruction(value)); return this; }
+    public constI64(value: number): this { this._instructions.push(new Expression.I64ConstInstruction(value)); return this; }
+    public constF32(value: number): this { this._instructions.push(new Expression.F32ConstInstruction(value)); return this; }
+    public constF64(value: number): this { this._instructions.push(new Expression.F64ConstInstruction(value)); return this; }
 
     public return(): this {
         this._instructions.push(Expression.ReturnInstruction.instance);
