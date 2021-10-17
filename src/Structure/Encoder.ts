@@ -1,4 +1,4 @@
-const zeros = '0000000000000000000000000000000000000000000000000000000000000000';
+const zeros = '00000000000000000000000000000000';
 
 type EncodeType = 'uint8' | 'uint32' | 'uint64' | 'int32' | 'float32' | 'float64';
 type NumericArray = { [key: number]: number, length: number };
@@ -11,9 +11,11 @@ export interface IEncoder {
     get size(): number;
     uint8(value: number): this;
     uint32(value: number, relaxed?: boolean): this;
-    uint64(value: number, relaxed?: boolean): this;
+    uint64(value: number | bigint, relaxed?: boolean): this;
     uint64(hi: number, lo: number, relaxed?: boolean): this;
     int32(value: number, relaxed?: boolean): this;
+    int64(value: number | bigint, relaxed?: boolean): this;
+    int64(hi: number, lo: number, relaxed?: boolean): this;
     float32(value: number, relaxed?: boolean): this;
     float64(value: number, relaxed?: boolean): this;
     vector(value: IEncodable<undefined>[]): this;
@@ -37,9 +39,161 @@ export interface IEncoder {
     append(data: IEncoder | NumericArray): this;
     spawn(): IEncoder;
     getBuffer(): Uint8Array;
-}
+} 
 export type IEncoderCtor = new() => IEncoder;
 
+// function signed32(x: number): number {
+//     return (x & 0x80000000) ? (-0x7fffffff + (x & 0x7fffffff) - 1) : x;
+// }
+
+function int64(signed: boolean, hi: number | bigint, lo?: number | boolean, relaxed?: boolean): [ string | number, boolean ] {
+    let value;
+    if ((typeof(lo) === 'undefined' && typeof(relaxed) === 'undefined') || typeof(lo) === 'boolean') {
+        if (signed ? (Number(hi) > -0x7fffffff && Number(hi) < 0x7fffffff) : (Number(hi) <= 0xffffffff)) { value = Number(hi); }
+        else {
+            value = hi.toString(2);
+            if (value.length < 64) {
+                if (signed) { value = (hi < 0 ? '1' : '0') + zeros.slice(value.length + 1) + value; }
+                else { value = (zeros + zeros).slice(value.length) + value; }
+            }
+        }
+        relaxed = !!lo;
+    }
+    else if (hi) {
+        let h = Number(hi).toString(2), l = Number(lo).toString(2);
+        value = zeros.slice(h.length) + h + zeros.slice(l.length) + l;
+    }
+    else { value = Number(lo); }
+    relaxed = !!relaxed;
+    return [ value, relaxed ];
+}
+
+function enc_u_leb128(bits: string | number, buffer: number[], maxBitSize?: number): void {
+    let get: (n: any) => number,
+        shift: (n: any) => any,
+        zero: (n: any) => boolean;
+    if (typeof(bits) === 'number' && bits <= 0xffffffff) {
+        bits = Number(bits) >>> 0;
+        get = (n: any) => n & 0x7f;
+        shift = (n: any) => n >>> 7;
+        zero = (n: any) => n === 0;
+    }
+    else {
+        if (typeof(bits) === 'number') { bits = (bits < 0 ? -bits : bits).toString(2); }
+        bits = '' + bits;
+        get = (n: any) => parseInt(n.slice(-7), 2);
+        shift = (n: any) => n.slice(0, -7);
+        zero = (n: any) => n.indexOf('1') < 0;
+    }
+    maxBitSize = maxBitSize || Infinity;
+    let byte, i = 0;
+    do {
+        byte = get(bits);
+        bits = shift(bits);
+        if (!zero(bits)) { byte |= 0x80; }
+        buffer.push(byte);
+        if ((i += 7) > maxBitSize) { throw new Error('Unsigned Int to encode (LEB128) is bigger than expected (' + maxBitSize + ')'); }
+    }
+    while (byte & 0x80);
+}
+function enc_s_leb128(bits: string | number, buffer: number[], maxBitSize?: number): void {
+    let get: (n: any) => number,
+        shift: (n: any) => any,
+        zero: (n: any) => boolean,
+        n1: (n: any) => boolean;
+    if (typeof(bits) === 'number' && bits <= 0xffffffff) {
+        bits = Number(bits) >>> 0;
+        get = (n: any) => n & 0x7f;
+        shift = (n: any) => n >> 7;
+        zero = (n: any) => n === 0;
+        n1 = (n: any) => n === -1;
+    }
+    else {
+        if (typeof(bits) === 'number' && bits < 0) { bits = -bits; }
+        bits = bits.toString(2);
+        get = (n: any) => parseInt(n.slice(-7), 2);
+        shift = (n: any) => n.slice(0, -7);
+        zero = (n: any) => n.indexOf('1') >= 0;
+        n1 = (n: any) => !(n.length % 7) && n.indexOf('0') < 0;
+    }
+    maxBitSize = maxBitSize || Infinity;
+    let byte, i = 0;
+    while (true) {
+        byte = get(bits);
+        bits = shift(bits);
+        if (
+            (zero(bits) && !(byte & 0x40)) ||
+            (n1(bits)   &&  (byte & 0x40))
+        ) { buffer.push(byte); break; }
+        buffer.push(byte | 0x80);
+        if ((i += 7) > maxBitSize) { throw new Error('Unsigned Int to encode (LEB128) is bigger than expected (' + maxBitSize + ')'); }
+    }
+}
+
+function enc_32_ieee754_2019(value: number): number {
+    let bytes = 0;
+    switch (value) {
+        case Number.POSITIVE_INFINITY: bytes = 0x7F800000; break;
+        case Number.NEGATIVE_INFINITY: bytes = 0xFF800000; break;
+        case +0.0: bytes = 0x40000000; break;
+        case -0.0: bytes = 0xC0000000; break;
+        default:
+            if (Number.isNaN(value)) { bytes = 0x7FC00000; break; }
+
+            if (value <= -0.0) {
+                bytes = 0x80000000;
+                value = -value;
+            }
+
+            let exponent = Math.floor(Math.log(value) / Math.log(2));
+            let significand = ((value / Math.pow(2, exponent)) * 0x00800000) | 0;
+
+            exponent += 127;
+            if (exponent >= 0xFF) {
+                exponent = 0xFF;
+                significand = 0;
+            } else if (exponent < 0) exponent = 0;
+
+            bytes = bytes | (exponent << 23);
+            bytes = bytes | (significand & ~(-1 << 23));
+        break;
+    }
+    return bytes;
+}
+
+function enc_64_ieee754_2019(value: number): [ number, number ] {
+    var hi = 0, lo = 0;
+    switch (value) {
+        case Number.POSITIVE_INFINITY: hi = 0x7FF00000; break;
+        case Number.NEGATIVE_INFINITY: hi = 0xFFF00000; break;
+        case +0.0: hi = 0x40000000; break;
+        case -0.0: hi = 0xC0000000; break;
+        default:
+            if (Number.isNaN(value)) { hi = 0x7FF80000; break; }
+
+            if (value <= -0.0) {
+                hi = 0x80000000;
+                value = -value;
+            }
+
+            let exponent = Math.floor(Math.log(value) / Math.log(2));
+            let significand = Math.floor((value / Math.pow(2, exponent)) * Math.pow(2, 52));
+
+            lo = significand & 0xFFFFFFFF;
+            significand /= Math.pow(2, 32);
+
+            exponent += 1023;
+            if (exponent >= 0x7FF) {
+                exponent = 0x7FF;
+                significand = 0;
+            } else if (exponent < 0) exponent = 0;
+
+            hi = hi | (exponent << 20);
+            hi = hi | (significand & ~(-1 << 20));
+        break;
+    }
+    return [ hi, lo ];
+}
 
 export class Encoder implements IEncoder {
     private _data: number[] = [];
@@ -58,121 +212,58 @@ export class Encoder implements IEncoder {
                 (value >>> 24) & 0xff
             )
         }
-        else {
-            let byte;
-            do {
-                byte = value & 0x7f;
-                value >>= 7;
-                if (value !== 0) { value |= 0x80; }
-                this._data.push(byte);
-            }
-            while (value !== 0);
-        }
+        else { enc_u_leb128(value, this._data, 32); }
         return this;
     }
-    public uint64(value: number): this;
-    public uint64(hi: number, lo: number): this;
-    public uint64(hi: number, lo?: number): this {
-        if (typeof(lo) === 'undefined') {
-            let s = hi.toString(2);
-            s = zeros.substring(s.length) + s;
-            hi = parseInt(s.substring(0, 32), 2);
-            lo = parseInt(s.substring(32), 2);
+    public uint64(value: number | bigint, relaxed?: boolean): this;
+    public uint64(hi: number, lo: number, relaxed?: boolean): this;
+    public uint64(hi: number | bigint, lo?: number | boolean, relaxed?: boolean): this {
+        let i = int64(false, hi, lo, relaxed),
+            value = i[0];
+        relaxed = i[1];
+        if (relaxed) {
+            let h, l;
+            if (typeof(value) === 'number') { h = 0; l = value; }
+            else {
+                h = parseInt(value.slice(0, 32), 2);
+                l = parseInt(value.slice(32), 2);
+            } 
+            this._data.push(
+                l          & 0xff,
+                (l >>>  8) & 0xff,
+                (l >>> 16) & 0xff,
+                (l >>> 24) & 0xff,
+                h          & 0xff,
+                (h >>>  8) & 0xff,
+                (h >>> 16) & 0xff,
+                (h >>> 24) & 0xff
+            );
         }
-
-        this._data.push(
-            lo          & 0xff,
-            (lo >>>  8) & 0xff,
-            (lo >>> 16) & 0xff,
-            (lo >>> 24) & 0xff,
-            hi          & 0xff,
-            (hi >>>  8) & 0xff,
-            (hi >>> 16) & 0xff,
-            (hi >>> 24) & 0xff
-        )
-
+        else { enc_u_leb128(value, this._data, 64); }
         return this;
     }
+    public int32(value: number, relaxed?: boolean): this {
+        if (relaxed) { return this.uint32(value, true); }
+        else { enc_s_leb128(value, this._data); }
+        return this;
+    }
+    public int64(value: number | bigint, relaxed?: boolean): this;
+    public int64(hi: number, lo: number, relaxed?: boolean): this
+    public int64(hi: number | bigint, lo?: number | boolean, relaxed?: boolean): this {
+        let i = int64(true, hi, lo, relaxed),
+            value = i[0];
+        relaxed = i[1];
+        if (relaxed) {
 
-    public int32(value: number): this {
-        value |= 0;
-        let byte;
-        while (true) {
-            byte = value & 0x7f;
-            value >>= 7;
-            if (
-                (value ===  0 && (byte & 0x40) === 0) ||
-                (value === -1 && (byte & 0x40) !== 0)
-            ) {
-                this._data.push(byte);
-                return this;
-            }
-            this._data.push(byte | 0x80);
         }
+        else { enc_s_leb128(value, this._data, 64); }
+        return this;
     }
     public float32(value: number): this {
-        let bytes = 0;
-        switch (value) {
-            case Number.POSITIVE_INFINITY: bytes = 0x7F800000; break;
-            case Number.NEGATIVE_INFINITY: bytes = 0xFF800000; break;
-            case +0.0: bytes = 0x40000000; break;
-            case -0.0: bytes = 0xC0000000; break;
-            default:
-                if (Number.isNaN(value)) { bytes = 0x7FC00000; break; }
-
-                if (value <= -0.0) {
-                    bytes = 0x80000000;
-                    value = -value;
-                }
-
-                var exponent = Math.floor(Math.log(value) / Math.log(2));
-                var significand = ((value / Math.pow(2, exponent)) * 0x00800000) | 0;
-
-                exponent += 127;
-                if (exponent >= 0xFF) {
-                    exponent = 0xFF;
-                    significand = 0;
-                } else if (exponent < 0) exponent = 0;
-
-                bytes = bytes | (exponent << 23);
-                bytes = bytes | (significand & ~(-1 << 23));
-            break;
-        }
-        return this.uint32(bytes, true);
+        return this.uint32(enc_32_ieee754_2019(value), true);
     }
     public float64(value: number): this {
-        var hi = 0, lo = 0;
-        switch (value) {
-            case Number.POSITIVE_INFINITY: hi = 0x7FF00000; break;
-            case Number.NEGATIVE_INFINITY: hi = 0xFFF00000; break;
-            case +0.0: hi = 0x40000000; break;
-            case -0.0: hi = 0xC0000000; break;
-            default:
-                if (Number.isNaN(value)) { hi = 0x7FF80000; break; }
-
-                if (value <= -0.0) {
-                    hi = 0x80000000;
-                    value = -value;
-                }
-
-                var exponent = Math.floor(Math.log(value) / Math.log(2));
-                var significand = Math.floor((value / Math.pow(2, exponent)) * Math.pow(2, 52));
-
-                lo = significand & 0xFFFFFFFF;
-                significand /= Math.pow(2, 32);
-
-                exponent += 1023;
-                if (exponent >= 0x7FF) {
-                    exponent = 0x7FF;
-                    significand = 0;
-                } else if (exponent < 0) exponent = 0;
-
-                hi = hi | (exponent << 20);
-                hi = hi | (significand & ~(-1 << 20));
-            break;
-        }
-
-        return this.uint64(hi, lo);
+        return this.uint64(...enc_64_ieee754_2019(value));
     }
 
     public vector(value: IEncodable<undefined>[]): this;
@@ -271,6 +362,29 @@ export interface IDecoder {
 }
 export type IDecoderCtor = new() => IDecoder;
 
+function dec_u_leb128(decoder: IDecoder, maxBitSize?: number): number {
+    maxBitSize = maxBitSize || Infinity;
+    let result = 0, shift = 0, byte, i = 0;
+    while (true) {
+        byte = decoder.uint8();
+        result |= (byte & 0x7f) << shift;
+        if (!(byte & 0x80)) { return result; }
+        shift += 7;
+        if ((i += 7) > maxBitSize) { throw new Error('Unsigned Int to decode (LEB128) is bigger than expected (' + maxBitSize + ')'); }
+    }
+}
+function dec_s_leb128(decoder: IDecoder, maxBitSize?: number): number {
+    maxBitSize = maxBitSize || Infinity;
+    let result = 0, shift = 0, byte;
+    while(true) {
+        byte = decoder.uint8();
+        result |= (byte & 0x7f) << shift;
+        shift += 7;
+        if (shift >= maxBitSize) { throw new Error('Signed Int to decode (LEB128) is bigger than expected (' + maxBitSize + ')'); }
+        if (!(byte & 0x80)) { return result | ((byte & 0x40) ? (-1 << shift) : 0x0); }
+    }
+}
+
 export class Decoder implements IDecoder {
     private _view: DataView;
     private _offset: number;
@@ -290,13 +404,7 @@ export class Decoder implements IDecoder {
     public uint8(): number { return this._view.getUint8(this._offset++); }
     public uint32(relaxed?: boolean): number {
         if (relaxed) { return this._view.getUint32(this._advance(4), true); }
-        let data = Array.from(this.read(4)), result = 0, shift = 0, byte;
-        while (true) {
-            byte = data.shift() || 0;
-            result |= (byte & 0x7f) << shift;
-            if (!(byte & 0x80)) { this._offset -= data.length; return result; }
-            shift += 7;
-        }
+        return dec_u_leb128(this, 32);
     }
     public uint64(relaxed?: boolean): number {
         if (relaxed) { 
@@ -304,29 +412,11 @@ export class Decoder implements IDecoder {
             let hi = this._view.getUint32(this._advance(4), true).toString(2);
             return parseInt(zeros.slice(hi.length) + hi + zeros.slice(lo.length) + lo, 2);
         }
-        let data = Array.from(this.read(8)), result = 0, shift = 0, byte;
-        while (true) {
-            byte = data.shift() || 0;
-            result |= (byte & 0x7f) << shift;
-            if (!(byte & 0x80)) { this._offset -= data.length; return result; }
-            shift += 7;
-        }
+       return dec_u_leb128(this, 64);
     }
     public int32(relaxed?: boolean): number {
         if (relaxed) { return this._view.getInt32(this._advance(4), true); }
-        let data = Array.from(this.read(4)), result = 0, shift = 0, byte;
-        while (true) {
-            byte = data.shift() || 0;
-            result |= (byte & 0x7f) << shift;
-            shift += 7;
-            if (!(byte & 0x80)) {
-                this._offset -= data.length;
-                if (shift < 32 && (byte & 0x40) !== 0) {
-                    return result | (~0 << shift);
-                }
-                return result;
-            }
-        }
+        return dec_s_leb128(this, 32)
     }
     public float32(): number { return this._view.getFloat32(this._advance(4)); }
     public float64(): number { return this._view.getFloat64(this._advance(8)); }

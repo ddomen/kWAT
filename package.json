@@ -4,12 +4,17 @@
   "description": "WebAssembly compiler toolkit",
   "main": "dist/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npx jasmine-ts --config=jasmine.json"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/jasmine": "^3.9.1",
     "@types/node": "^16.10.3",
+    "jasmine": "^3.10.0",
+    "jasmine-spec-reporter": "^7.0.0",
+    "jasmine-ts": "^0.4.0",
+    "ts-node": "^10.3.0",
     "tsc": "^2.0.3"
   }
 }

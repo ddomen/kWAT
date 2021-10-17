@@ -1,11 +1,61 @@
 import * as Types from './Types';
 import * as Sections from './Sections';
 import * as Expression from './Expression';
+import { Module } from './Module';
 
 type Exprimible<I extends Expression.Instruction=Expression.Instruction> = I | { instance: I };
 
 export interface IBuilder<T> { build(): T; }
-export type BuildingCallback<B extends IBuilder<any>> = (builder: B) => B;
+export type BuildingCallback<B extends IBuilder<any>> = (builder: Omit<B, 'build'>) => B;
+
+export class ModuleBuilder implements IBuilder<Module> {
+    private _version: number;
+    private _functions: { [key: string]: FunctionDefinition };
+    private _starter: string | null;
+    private _sourcemap: string | null;
+
+    public get CurrentVersion(): number { return this._version; }
+    
+    public constructor() {
+        this._version = 1;
+        this._functions = {};
+        this._sourcemap = null;
+        this._starter = null;
+    }
+
+    public version(version: number): this { this._version = Math.max(1, Number(version) || 0); return this; }
+    public function(fn: BuildingCallback<FunctionBuilder>, localName?: string, starter: boolean=false): this {
+        if (!localName) {
+            do { localName = Math.random().toString(16).slice(3); }
+            while (localName in this._functions);
+        }
+        if (localName in this._functions) { throw new Error('Function \'' + localName + '\' already defined in this module'); }
+        this._functions[localName] = fn(new FunctionBuilder()).build();
+        if (starter) { this._starter = localName; }
+        return this;
+    }
+
+    public starter(name: string): this {
+        if (name in this._functions) { this._starter = name; }
+        return this;
+    }
+
+    public sourceMap(url: string | null): this { this._sourcemap = url; return this; }
+    public unsetSourceMap(): this { return this.sourceMap(null); }
+
+    public build(): Module {
+        let m = new Module(this._version);
+        for (let name in this._functions) {
+            m.defineFunction(this._functions[name]!);
+            if (this._starter === name) {
+                let i = m.TypeSection.indexOf(this._functions[name]!.segment.Signature);
+                if (i != -1) { m.StartSection.Target = m.TypeSection.Types[i]!; }
+            }
+        }
+        if (this._sourcemap) { m.CustomSections.push(new Sections.SourceMapSection(this._sourcemap)); }
+        return m;
+    }
+}
 
 export type FunctionDefinition = {
     segment: Sections.CodeSegment,
@@ -358,6 +408,8 @@ export class ExpressionBuilder implements IBuilder<Expression.Expression> {
         throw new Error('Invalid type')
     }
 
+    public const(value: number | bigint, type: Types.Type.i64 | 'i64'): this;
+    public const(value: number, type?: Types.NumberType | Types.NumberTypeKey): this;
     public const(value: number, type: Types.NumberType | Types.NumberTypeKey = Types.Type.i32): this {
         return this._discriminate<Types.NumberType, [ number ]>({
             i32: this.constInt32, i64: this.constInt64,

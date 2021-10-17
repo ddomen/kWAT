@@ -1,4 +1,4 @@
-import { isSpace, Throw } from './internal';
+// import { isSpace, Throw } from './internal';
 import type { Module } from './Structure';
 
 
@@ -6,6 +6,24 @@ export interface IParser { parse(text: string): Module }
 export type IParserCtor = new() => IParser;
 
 type SExpression = (string | SExpression)[];
+
+const Throw = {
+    ParserError(message: string, state?: State): Error {
+        return new Error(message + (state ? (' (' + state.line + ', ' + state.column + ')') : ''));
+    },
+    Character(given: string, expected: string, state?: State): never {
+        throw this.ParserError(
+            'Invalid character \'' + given + '\', expected \'' + expected + '\'',
+            state
+        );
+    },
+    EOF(): never { throw this.ParserError('Unexpected input end'); },
+    EmptyExpression(state?: State): never { throw this.ParserError('Empty Expression', state); },
+    InvalidExpression(state?: State): never { throw this.ParserError('Invalid Expression', state); },
+    InvalidArgument(message: string, name?: string): never { throw new Error(message + (name ? '(arg: ' + name + ')' : '')); }
+}
+
+function isSpace(char: string): boolean { return !!char.match(/\s/); }
 
 class State {
 

@@ -1016,7 +1016,7 @@ export class I32ConstInstruction extends NumericConstInstruction<OpCodes.i32_con
     public constructor(value: number = 0) {super(OpCodes.i32_const, value); }
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
         super.encode(encoder, context);
-        encoder.uint32(this.Value | 0)
+        encoder.int32(this.Value | 0)
     }
     public static override decode(decoder: IDecoder): I32ConstInstruction {
         return new I32ConstInstruction(decoder.uint32());
@@ -1024,10 +1024,10 @@ export class I32ConstInstruction extends NumericConstInstruction<OpCodes.i32_con
 }
 I32ConstInstruction.registerInstruction(OpCodes.i32_const);
 export class I64ConstInstruction extends NumericConstInstruction<OpCodes.i64_const> {
-    public constructor(value: number = 0) {super(OpCodes.i64_const, value); }
+    public constructor(value: number | bigint = 0) {super(OpCodes.i64_const, value as number); }
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
         super.encode(encoder, context);
-        encoder.uint64(this.Value)
+        encoder.int64(this.Value)
     }
     public static override decode(decoder: IDecoder): I64ConstInstruction {
         return new I64ConstInstruction(decoder.uint64());

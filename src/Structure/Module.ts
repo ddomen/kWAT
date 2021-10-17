@@ -1,5 +1,5 @@
 import { protect } from '../internal';
-import { BuildingCallback, FunctionBuilder } from './Builder';
+import { BuildingCallback, FunctionBuilder, FunctionDefinition, ModuleBuilder } from './Builder';
 import * as Sections from './Sections';
 import type { IEncoder ,IDecoder, IEncodable } from './Encoder';
 
@@ -66,8 +66,8 @@ export class Module implements IEncodable {
         ;
     }
 
-    public defineFunction(fn: BuildingCallback<FunctionBuilder>): this {
-        let def = fn(new FunctionBuilder()).build();
+    public defineFunction(fn: BuildingCallback<FunctionBuilder> | FunctionDefinition): this {
+        let def = typeof(fn) === 'function' ? fn(new FunctionBuilder()).build() : fn;
         if (def.export) {
             if (!this.ExportSection.add(def.export)) {
                 throw new Error('Exported function name already defined');
@@ -97,9 +97,7 @@ export class Module implements IEncodable {
             size = decoder.uint32();
             slice = decoder.slice(size);
             if (type === Sections.SectionTypes.custom) {
-                let custom = new Sections.CustomSection();
-                custom.after(precedence).decode(slice);
-                m.CustomSections.push(custom);
+                m.CustomSections.push(Sections.CustomSection.decode(slice).after(precedence));
             }
             else if (sections[type]) { throw new Error('Duplicated Section type: ' + type); }
             else {
@@ -117,4 +115,7 @@ export class Module implements IEncodable {
     }
 
     public static readonly Magic: typeof ModuleMagic = ModuleMagic;
+    public static build(builder: BuildingCallback<ModuleBuilder>): Module {
+        return builder(new ModuleBuilder()).build();
+    }
 }
