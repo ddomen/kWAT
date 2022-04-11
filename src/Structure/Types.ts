@@ -24,7 +24,7 @@ export type MutableType = Type.const | Type.var;
 export type TypesKey<T extends Type=Type> = {
     [K in keyof typeof Type]: (typeof Type)[K] extends T ? K : never;
 }[keyof typeof Type]
-export type Stack = [ ResultType, ResultType ];
+export type Stack = ResultType;
 
 export type ValueTypeKey = TypesKey<ValueType>;
 export type ReferenceTypeKey = TypesKey<ReferenceType>;
@@ -54,14 +54,10 @@ export function validMutableKey(target: string): target is MutableTypeKey { retu
 export class FunctionType implements IEncodable {
     public readonly Parameters!: ResultType;
     public readonly Results!: ResultType;
-    public Reference: string;
 
-    public get isReference(): boolean { return !!this.Reference && !this.Parameters.length && !this.Results.length; }
-
-    public constructor(params: ResultType = [], results: ResultType = [], reference?: string) {
+    public constructor(params: ResultType = [], results: ResultType = []) {
         protect(this, 'Parameters', params.slice(), true);
         protect(this, 'Results', results.slice(), true);
-        this.Reference = reference || '';
     }
 
     public encode(encoder: IEncoder): void {
@@ -72,19 +68,14 @@ export class FunctionType implements IEncodable {
         ;
     }
 
-    public equals(other: FunctionType): boolean {
-        return this.Parameters.length == other.Parameters.length &&
+    public equals(other: any): boolean {
+        return this === other || (
+                other instanceof FunctionType && 
+                this.Parameters.length == other.Parameters.length &&
                 this.Parameters.every((p, i) => p === other.Parameters[i]) &&
                 this.Results.length == other.Results.length &&
-                this.Results.every((r, i) => r === other.Results[i]);
-    }
-
-    public referred(other: FunctionType | string): boolean {
-        if (other instanceof FunctionType) { return other.isReference && this.Reference === other.Reference; }
-        return this.Reference === other;
-    }
-    public refer(other: FunctionType | string): boolean {
-        return this.isReference && (other instanceof FunctionType ? other.Reference : other) === other;
+                this.Results.every((r, i) => r === other.Results[i])
+        );
     }
 
     public clone(): FunctionType { return new FunctionType(this.Parameters, this.Results); }
@@ -95,12 +86,6 @@ export class FunctionType implements IEncodable {
             decoder.vector('uint8'),
             decoder.vector('uint8')
         )
-    }
-
-    public static refer(name: string): FunctionType {
-        name = '' + name
-        if (!name) { throw new Error('Invalid empty name for a function reference'); }
-        return new FunctionType([], [], name);
     }
 }
 
@@ -116,6 +101,14 @@ export class LimitType implements IEncodable {
     public encode(encoder: IEncoder): void {
         if (typeof(this.Max) !== 'undefined') { encoder.uint8(0x01).uint32(this.Min).uint32(this.Max); }
         else { encoder.uint8(0x00).uint32(this.Min); }
+    }
+
+    public equals(other: any): boolean {
+        return this === other || (
+                other instanceof LimitType &&
+                this.Max === other.Max &&
+                this.Min === other.Min
+        );
     }
 
     public static decode(decoder: IDecoder): LimitType {
@@ -142,6 +135,14 @@ export class TableType implements IEncodable {
         encoder.uint8(this.Reference).encode(this.Limits);
     }
 
+    public equals(other: any): boolean {
+        return this === other || (
+                other instanceof TableType &&
+                this.Reference === other.Reference &&
+                this.Limits.equals(other.Limits)
+        );
+    }
+
     public static decode(decoder: IDecoder): TableType {
         let ref = decoder.uint8();
         let limit = LimitType.decode(decoder);
@@ -157,6 +158,14 @@ export class GlobalType implements IEncodable {
     public constructor(type: ValueType, constant: boolean = false) {
         this.Type = type;
         this.Constant = !!constant;
+    }
+
+    public equals(other: any): boolean {
+        return this === other || (
+                other instanceof GlobalType &&
+                this.Constant === other.Constant &&
+                this.Type === other.Type
+        );
     }
 
     public encode(encoder: IEncoder): void {

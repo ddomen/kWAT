@@ -6,3 +6,4 @@ export * from './Types'
 
 export * as Expression from './Expression'
 export * as Builder from './Builder'
+export * as Printer from './Printer'

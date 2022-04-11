@@ -51,6 +51,7 @@ export class Expression implements IEncodable<Module> {
         while (decoder.peek() != OpCodes.end) {
             exp.Instructions.push(Instruction.decode(decoder, { module: context, blocks: [] }));
         }
+        decoder.uint8();
         return exp;
     }
 }
@@ -62,11 +63,12 @@ type Instructible<O extends OpCodes=OpCodes> = { instance: Instruction<O> } | ID
 type ForwardInstructible<O extends ForwardOpCodes=ForwardOpCodes> = { instance: ForwardInstruction<O> } | IDecodable<ForwardInstruction<O>, [ ExpressionContext ]>;
 type ExpressionContext = { module: Module, blocks: AbstractBlockInstruction[] };
 type Ctor<I extends Instruction, Args extends any[]=[]> = { new(...args: Args): I };
-type StackEdit = [ null | Types.ResultType, null | Types.ResultType ];
+type StackEdit = [ (Types.ValueType | null)[], (Types.ValueType | { ref: number })[] ];
+type DefiniteStackEdit = [ Types.Stack, Types.Stack ];
 
 export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodable<ExpressionContext> {
     public readonly Code!: O;
-    public get stack(): StackEdit { return [ null, null ]; }
+    public get stack(): StackEdit { return [ [], [] ]; }
     protected constructor(code: O) { protect(this, 'Code', code, true); }
     public getIndex(expression: Expression, pass?: boolean): number {
         let index = expression.Instructions.indexOf(this);
@@ -75,27 +77,35 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
     }
     public encode(encoder: IEncoder, _: ExpressionContext): void { encoder.uint8(this.Code); }
 
-    public evaluate(params: Types.ResultType): Passable<undefined, Types.ResultType>;
-    public evaluate<B extends boolean>(params: Types.ResultType, pass: B): Passable<B, Types.ResultType>;
-    public evaluate(params: Types.ResultType, pass?: boolean): Passable<typeof pass, Types.ResultType>;
-    public evaluate(params: Types.ResultType, pass?: boolean): Passable<typeof pass, Types.ResultType> {
-        if (!Array.isArray(params)) { throw new TypeError('First argument must be a ResultType (Array<ValueType>)'); }
+    public evaluate(stack: Types.Stack): Passable<undefined, Types.ResultType>;
+    public evaluate<B extends boolean>(stack: Types.Stack, pass: B): Passable<B, Types.ResultType>;
+    public evaluate(stack: Types.Stack, pass?: boolean): Passable<typeof pass, Types.ResultType>;
+    public evaluate(stack: Types.Stack, pass?: boolean): Passable<typeof pass, Types.ResultType> {
+        if (!Array.isArray(stack)) { throw new TypeError('First argument must be a ResultType (Array<ValueType>)'); }
         let wrong!: [number, number];
-        if (params.some((n, i) => (wrong = [n, i], !Types.validValue(n)))) {
+        if (stack.some((n, i) => (wrong = [n, i], !Types.validValue(n)))) {
             throw new TypeError('Invalid ValueType in params: 0x' + Number(wrong[0]).toString(16) + ' (index: ' + wrong[1] + ')');
         }
-        let stack = this.stack;
-        let result = stack[0] === null || (
-                        stack[0].length === params.length &&
-                        stack[0].every((v, i) => v === params[i])
-                    ) ?
-                (stack[1] === null ? params : stack[1]) :
-                null;
+        let stackEdit = this.stack;
+        let stackOp = stack.slice();
+        let result: Types.ResultType | null = null;
+        let typeStack: Types.ValueType[] = [];
+        if (stackEdit[0].every(s => {
+            const c = stackOp.pop();
+            if (typeof(c) === 'undefined') { return false; }
+            if (c === s) { return true; }
+            if (s === null) { typeStack.push(c); return true; }
+            return false;
+        })) {
+            stackOp.push(...stackEdit[1].map(x => typeof(x) === 'object' ? typeStack[x.ref]! : x));
+            result = stackOp;
+        }
         if (!pass && !result) {
             throw new Error(
                 'Can not resolve stack for ' + this.constructor.name +
-                ' with parameters [ ' + params.map(v => '0x' + Number(v).toString(16) +
-                ' (index: ' + Types.Type[v] + ')').join(', ') + ' ]'
+                ' current stack: [' + stack.map(s => Types.Type[s]).join(', ') + ']' +
+                ' instruction edit: [' + (stackEdit[0] || []).map(s => typeof(s) === 'object' ? '?' : Types.Type[s]) + '] -> [' +
+                (stackEdit[1] || []).map(s => typeof(s) === 'object' ? '?' : Types.Type[s]) + ']'
             );
         }
         return result;
@@ -138,10 +148,11 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
         } 
         return curr;
     }
-    public static checkStack(instructions: Instruction[], stack: Types.Stack): boolean;
+
+    public static checkStack(instructions: Instruction[], stack: DefiniteStackEdit): boolean;
     public static checkStack(instructions: Instruction[], signature: Types.FunctionType): boolean;
     public static checkStack(instructions: Instruction[], params: Types.ResultType, results: Types.ResultType): boolean;
-    public static checkStack(instructions: Instruction[], stack: Types.Stack | Types.ResultType | Types.FunctionType, results?: Types.ResultType): boolean {
+    public static checkStack(instructions: Instruction[], stack: DefiniteStackEdit | Types.ResultType | Types.FunctionType, results?: Types.ResultType): boolean {
         if (stack instanceof Types.FunctionType) { stack = [ stack.Parameters, stack.Results ]; }
         else if (Array.isArray(results)) { stack = [ stack as Types.ResultType, results ]; }
         if (!Array.isArray(stack)) { throw new TypeError('Invalid argument: second argument must be of type Stack|FunctionType|ResultType'); }
@@ -303,6 +314,7 @@ export class LoopInstruction extends AbstractBlockInstruction<OpCodes.loop> {
 }
 LoopInstruction.registerInstruction(OpCodes.loop);
 export class IfThenElseInstruction extends AbstractBlockInstruction<OpCodes.if> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [] ]; }
     public readonly Else!: Instruction[];
     public get Then(): Instruction[] { return this.Block; }
     public constructor(thenType?: BlockType, then: Instruction[] = [], elseBlock: Instruction[]=[]) {
@@ -379,10 +391,12 @@ export class BranchInstruction extends AbstractBranchInstruction<OpCodes.br> {
 }
 BranchInstruction.registerInstruction(OpCodes.br);
 export class BranchIfInstruction extends AbstractBranchInstruction<OpCodes.br_if> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [] ]; }
     constructor(target: AbstractBlockInstruction) { super(OpCodes.br_if, target); }
 }
 BranchIfInstruction.registerInstruction(OpCodes.br_if);
 export class BranchTableInstruction extends AbstractBranchInstruction<OpCodes.br_table> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [] ]; }
     public readonly Targets!: AbstractBlockInstruction[];
     constructor(firstTarget: AbstractBlockInstruction, ...targets: AbstractBlockInstruction[]) {
         super(OpCodes.br_table, firstTarget);
@@ -409,6 +423,7 @@ export class BranchTableInstruction extends AbstractBranchInstruction<OpCodes.br
 BranchTableInstruction.registerInstruction(OpCodes.br_table);
 
 export class ReturnInstruction extends ControlInstruction<OpCodes.return> {
+    public override get stack(): StackEdit { return [ [ null ], [ { ref: 0 } ] ]; }
     private constructor() { super(OpCodes.return); }
     public static readonly instance = new ReturnInstruction();
 }
@@ -418,10 +433,14 @@ export type CallInstructionCodes = OpCodes.call | OpCodes.call_indirect;
 export abstract class AbstractCallInstruction<O extends CallInstructionCodes=CallInstructionCodes> extends ControlInstruction<O> { }
 
 export class CallInstruction extends AbstractCallInstruction<OpCodes.call> {
+    public override get stack(): StackEdit { return [ this.Function.Parameters.slice(), this.Function.Results.slice() ]; }
     public Function: Types.FunctionType;
-    public constructor(fn: Types.FunctionType) { super(OpCodes.call); this.Function = fn; }
+    public constructor(fn: Types.FunctionType) {
+        super(OpCodes.call);
+        this.Function = fn;
+    }
     public getFunctionIndex(context: ExpressionContext, pass?: boolean): number {
-        let index = context.module.FunctionSection.indexOf(this.Function);
+        let index = context.module.TypeSection.indexOf(this.Function);
         if(!pass && index < 0) { throw new Error('Call Instruction invalid function reference'); }
         return index;
     }
@@ -439,6 +458,12 @@ export class CallInstruction extends AbstractCallInstruction<OpCodes.call> {
 CallInstruction.registerInstruction(OpCodes.call);
 
 export class CallIndirectInstruction extends AbstractCallInstruction<OpCodes.call_indirect> {
+    public override get stack(): StackEdit {
+        return [
+            this.Type.Parameters.slice().concat([ Types.Type.i32 ]),
+            this.Type.Results.slice()
+        ];
+    }
     public Type: Types.FunctionType;
     public Table: Types.TableType;
     public constructor(fn: Types.FunctionType, table: Types.TableType) {
@@ -493,6 +518,7 @@ export class ReferenceNullInstruction extends ReferenceInstruction<OpCodes.ref_n
 }
 ReferenceNullInstruction.registerInstruction(OpCodes.ref_null);
 export class ReferenceIsNullInstruction extends ReferenceInstruction<OpCodes.ref_is_null> {
+    public override get stack(): StackEdit { return [ [], [ Types.Type.i32 ] ]; }
     private constructor() { super(OpCodes.ref_is_null); }
     public static readonly instance = new ReferenceIsNullInstruction();
 }
@@ -528,12 +554,14 @@ export class DropInstruction extends ParametricInstruction<OpCodes.drop> {
 }
 DropInstruction.registerInstruction(OpCodes.drop);
 export class SelectInstruction extends ParametricInstruction<OpCodes.select> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [] ]; }
     private constructor() { super(OpCodes.select); }
     public static readonly instance = new SelectInstruction();
 }
 SelectInstruction.registerInstruction(OpCodes.select);
 
 export class SelectAllInstruction extends ParametricInstruction<OpCodes.select_t> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [] ]; }
     public readonly Values!: Types.ValueType[];
     public constructor(values: Types.ValueType[]) { super(OpCodes.select_t); protect(this, 'Values', values.slice(), true); }
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
@@ -612,11 +640,13 @@ export type TableInstructionCodes = OpCodes.table_get | OpCodes.table_set | OpCo
 export abstract class AbstractTableInstruction<O extends TableInstructionCodes> extends Instruction<O> { }
 
 export class TableGetInstruction extends AbstractTableInstruction<OpCodes.table_get> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [] ]; }
     private constructor() { super(OpCodes.table_get); }
     public static readonly instance = new TableGetInstruction();
 }
 TableGetInstruction.registerInstruction(OpCodes.table_get);
 export class TableSetInstruction extends AbstractTableInstruction<OpCodes.table_set> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [] ]; }
     private constructor() { super(OpCodes.table_set); }
     public static readonly instance = new TableSetInstruction();
 }
@@ -644,6 +674,7 @@ export abstract class TableInstruction<O extends TableInstructionForwardCodes=Ta
 }
 export class TableInitInstruction extends TableInstruction<ForwardOpCodes.table_init> {
     public Element: Sections.ElementSegment;
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32, Types.Type.i32 ], [] ]; }
     public constructor(table: Types.TableType, element: Sections.ElementSegment) { super(ForwardOpCodes.table_init, table); this.Element = element; }
     public getElementIndex(context: ExpressionContext, pass?: boolean): number {
         let index = context.module.ElementSection.Elements.indexOf(this.Element);
@@ -693,6 +724,7 @@ export class ElementDropInstruction extends TableInstruction<ForwardOpCodes.elem
 ElementDropInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.elem_drop);
 export class TableCopyInstruction extends TableInstruction<ForwardOpCodes.table_copy> {
     public Destination: Types.TableType;
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32, Types.Type.i32 ], [] ]; }
     public get Source(): Types.TableType { return this.Table; }
     public set Source(value: Types.TableType) { this.Table = value; }
     public constructor(table: Types.TableType, destination: Types.TableType) {
@@ -740,15 +772,18 @@ export abstract class TableOpInstruction<O extends TableOpInstructionCodes=Table
     }
 }
 export class TableGrowInstruction extends TableOpInstruction<ForwardOpCodes.table_grow> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i32 ] ]; }
     public constructor(table: Types.TableType) { super(ForwardOpCodes.table_grow, table); }
 }
 TableGrowInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.table_grow);
 export class TableSizeInstruction extends TableOpInstruction<ForwardOpCodes.table_size> {
+    public override get stack(): StackEdit { return [ [], [ Types.Type.i32 ] ]; }
     public constructor(table: Types.TableType) { super(ForwardOpCodes.table_size, table); }
 }
 TableSizeInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.table_size);
 
 export class TableFillInstruction extends TableOpInstruction<ForwardOpCodes.table_fill> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ]; }
     public constructor(table: Types.TableType) { super(ForwardOpCodes.table_fill, table); }
 }
 TableFillInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.table_fill);
@@ -790,123 +825,147 @@ export abstract class MemoryManagementInstruction<O extends MemoryLoadInstructio
 export abstract class MemoryLoadInstruction<O extends MemoryLoadInstructionCodes> extends MemoryManagementInstruction<O> {}
 export abstract class MemoryStoreInstruction<O extends MemoryStoreInstructionCodes> extends MemoryManagementInstruction<O> {}
 export class I32LoadInstruction extends MemoryLoadInstruction<OpCodes.i32_load> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i32 ] ]; }
     private constructor() { super(OpCodes.i32_load); }
     public static readonly instance = new I32LoadInstruction();
 }
 I32LoadInstruction.registerInstruction(OpCodes.i32_load);
 export class I64LoadInstruction extends MemoryLoadInstruction<OpCodes.i64_load> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i64 ] ]; }
     private constructor() { super(OpCodes.i64_load); }
     public static readonly instance = new I64LoadInstruction();
 }
 I64LoadInstruction.registerInstruction(OpCodes.i64_load);
 export class F32LoadInstruction extends MemoryLoadInstruction<OpCodes.f32_load> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.f32 ] ]; }
     private constructor() { super(OpCodes.f32_load); }
     public static readonly instance = new F32LoadInstruction();
 }
 F32LoadInstruction.registerInstruction(OpCodes.f32_load);
 export class F64LoadInstruction extends MemoryLoadInstruction<OpCodes.f64_load> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.f64 ] ]; }
     private constructor() { super(OpCodes.f64_load); }
     public static readonly instance = new F64LoadInstruction();
 }
 F64LoadInstruction.registerInstruction(OpCodes.f64_load);
 export class I32Load8SignedLoadInstruction extends MemoryLoadInstruction<OpCodes.i32_load8_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i32 ] ]; }
     private constructor() { super(OpCodes.i32_load8_s); }
     public static readonly instance = new I32Load8SignedLoadInstruction();
 }
 I32Load8SignedLoadInstruction.registerInstruction(OpCodes.i32_load8_s);
 export class I32Load16SignedLoadInstruction extends MemoryLoadInstruction<OpCodes.i32_load16_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i32 ] ]; }
     private constructor() { super(OpCodes.i32_load16_s); }
     public static readonly instance = new I32Load16SignedLoadInstruction();
 }
 I32Load16SignedLoadInstruction.registerInstruction(OpCodes.i32_load16_s);
 export class I64Load8SignedLoadInstruction extends MemoryLoadInstruction<OpCodes.i64_load8_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i64 ] ]; }
     private constructor() { super(OpCodes.i64_load8_s); }
     public static readonly instance = new I64Load8SignedLoadInstruction();
 }
 I64Load8SignedLoadInstruction.registerInstruction(OpCodes.i64_load8_s);
 export class I64Load16SignedLoadInstruction extends MemoryLoadInstruction<OpCodes.i64_load16_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i64 ] ]; }
     private constructor() { super(OpCodes.i64_load16_s); }
     public static readonly instance = new I64Load16SignedLoadInstruction();
 }
 I64Load16SignedLoadInstruction.registerInstruction(OpCodes.i64_load16_s);
 export class I64Load32SignedLoadInstruction extends MemoryLoadInstruction<OpCodes.i64_load32_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i64 ] ]; }
     private constructor() { super(OpCodes.i64_load32_s); }
     public static readonly instance = new I64Load32SignedLoadInstruction();
 }
 I64Load32SignedLoadInstruction.registerInstruction(OpCodes.i64_load32_s);
 export class I32Load8UnsignedLoadInstruction extends MemoryLoadInstruction<OpCodes.i32_load8_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i32 ] ]; }
     private constructor() { super(OpCodes.i32_load8_u); }
     public static readonly instance = new I32Load8UnsignedLoadInstruction();
 }
 I32Load8UnsignedLoadInstruction.registerInstruction(OpCodes.i32_load8_u);
 export class I32Load16UnsignedLoadInstruction extends MemoryLoadInstruction<OpCodes.i32_load16_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i32 ] ]; }
     private constructor() { super(OpCodes.i32_load16_u); }
     public static readonly instance = new I32Load16UnsignedLoadInstruction();
 }
 I32Load16UnsignedLoadInstruction.registerInstruction(OpCodes.i32_load16_u);
 export class I64Load8UnsignedLoadInstruction extends MemoryLoadInstruction<OpCodes.i64_load8_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i64 ] ]; }
     private constructor() { super(OpCodes.i64_load8_u); }
     public static readonly instance = new I64Load8UnsignedLoadInstruction();
 }
 I64Load8UnsignedLoadInstruction.registerInstruction(OpCodes.i64_load8_u);
 export class I64Load16UnsignedLoadInstruction extends MemoryLoadInstruction<OpCodes.i64_load16_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i64 ] ]; }
     private constructor() { super(OpCodes.i64_load16_u); }
     public static readonly instance = new I64Load16UnsignedLoadInstruction();
 }
 I64Load16UnsignedLoadInstruction.registerInstruction(OpCodes.i64_load16_u);
 export class I64Load32UnsignedLoadInstruction extends MemoryLoadInstruction<OpCodes.i64_load32_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i64 ] ]; }
     private constructor() { super(OpCodes.i64_load32_u); }
     public static readonly instance = new I64Load32UnsignedLoadInstruction();
 }
 I64Load32UnsignedLoadInstruction.registerInstruction(OpCodes.i64_load32_u);
 
 export class I32StoreInstruction extends MemoryStoreInstruction<OpCodes.i32_store> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [] ]; }
     private constructor() { super(OpCodes.i32_store); }
     public static readonly instance = new I32StoreInstruction();
 }
 I32StoreInstruction.registerInstruction(OpCodes.i32_store);
 export class I64StoreInstruction extends MemoryStoreInstruction<OpCodes.i64_store> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i64 ], [] ]; }
     private constructor() { super(OpCodes.i64_store); }
     public static readonly instance = new I64StoreInstruction();
 }
 I64StoreInstruction.registerInstruction(OpCodes.i64_store);
 export class F32StoreInstruction extends MemoryStoreInstruction<OpCodes.f32_store> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.f32 ], [] ]; }
     private constructor() { super(OpCodes.f32_store); }
     public static readonly instance = new F32StoreInstruction();
 }
 F32StoreInstruction.registerInstruction(OpCodes.f32_store);
 export class F64StoreInstruction extends MemoryStoreInstruction<OpCodes.f64_store> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.f64 ], [] ]; }
     private constructor() { super(OpCodes.f64_store); }
     public static readonly instance = new F64StoreInstruction();
 }
 F64StoreInstruction.registerInstruction(OpCodes.f64_store);
 export class I32Store8Instruction extends MemoryStoreInstruction<OpCodes.i32_store8> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [] ]; }
     private constructor() { super(OpCodes.i32_store8); }
     public static readonly instance = new I32Store8Instruction();
 }
 I32Store8Instruction.registerInstruction(OpCodes.i32_store8);
 export class I32Store16Instruction extends MemoryStoreInstruction<OpCodes.i32_store16> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [] ]; }
     private constructor() { super(OpCodes.i32_store16); }
     public static readonly instance = new I32Store16Instruction();
 }
 I32Store16Instruction.registerInstruction(OpCodes.i32_store16);
 export class I64Store8Instruction extends MemoryStoreInstruction<OpCodes.i64_store8> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i64 ], [] ]; }
     private constructor() { super(OpCodes.i64_store8); }
     public static readonly instance = new I64Store8Instruction();
 }
 I64Store8Instruction.registerInstruction(OpCodes.i64_store8);
 export class I64Store16Instruction extends MemoryStoreInstruction<OpCodes.i64_store16> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i64 ], [] ]; }
     private constructor() { super(OpCodes.i64_store16); }
     public static readonly instance = new I64Store16Instruction();
 }
 I64Store16Instruction.registerInstruction(OpCodes.i64_store16);
 export class I64Store32Instruction extends MemoryStoreInstruction<OpCodes.i64_store32> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i64 ], [] ]; }
     private constructor() { super(OpCodes.i64_store32); }
     public static readonly instance = new I64Store32Instruction();
 }
 I64Store32Instruction.registerInstruction(OpCodes.i64_store32);
 
 export class MemorySizeInstruction extends AbstractMemoryInstruction<OpCodes.memory_size> {
+    public override get stack(): StackEdit { return [ [], [ Types.Type.i32 ] ]; }
     private constructor() { super(OpCodes.memory_size); }
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
         super.encode(encoder, context);
@@ -916,6 +975,7 @@ export class MemorySizeInstruction extends AbstractMemoryInstruction<OpCodes.mem
 }
 MemorySizeInstruction.registerInstruction(OpCodes.memory_size);
 export class MemoryGrowInstruction extends AbstractMemoryInstruction<OpCodes.memory_grow> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i32 ] ]; }
     private constructor() { super(OpCodes.memory_grow); }
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
         super.encode(encoder, context);
@@ -926,6 +986,7 @@ export class MemoryGrowInstruction extends AbstractMemoryInstruction<OpCodes.mem
 MemoryGrowInstruction.registerInstruction(OpCodes.memory_grow);
 
 export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.look_forward> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32, Types.Type.i32 ], [] ]; }
     public readonly OperationCode!: ForwardOpCodes.memory_init;
     public Data: Sections.DataSegment;
     public constructor(data: Sections.DataSegment) {
@@ -979,6 +1040,7 @@ export class DataDropInstruction extends AbstractMemoryInstruction<OpCodes.look_
 }
 DataDropInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.data_drop);
 export class MemoryCopyInstruction extends AbstractMemoryInstruction<OpCodes.look_forward> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32, Types.Type.i32 ], [] ]; }
     public readonly OperationCode!: ForwardOpCodes.memory_copy;
     public constructor() {
         super(OpCodes.look_forward);
@@ -992,6 +1054,7 @@ export class MemoryCopyInstruction extends AbstractMemoryInstruction<OpCodes.loo
 }
 MemoryCopyInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.memory_copy);
 export class MemoryFillInstruction extends AbstractMemoryInstruction<OpCodes.look_forward> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32, Types.Type.i32 ], [] ]; }
     public readonly OperationCode!: ForwardOpCodes.memory_fill;
     public constructor() {
         super(OpCodes.look_forward);
@@ -1013,6 +1076,7 @@ export abstract class NumericConstInstruction<O extends NumericConstInstructionC
     protected constructor(code: O, value: number) { super(code); this.Value = value; }
 }
 export class I32ConstInstruction extends NumericConstInstruction<OpCodes.i32_const> {
+    public override get stack(): StackEdit { return [ [], [ Types.Type.i32 ] ] }
     public constructor(value: number = 0) {super(OpCodes.i32_const, value); }
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
         super.encode(encoder, context);
@@ -1024,6 +1088,7 @@ export class I32ConstInstruction extends NumericConstInstruction<OpCodes.i32_con
 }
 I32ConstInstruction.registerInstruction(OpCodes.i32_const);
 export class I64ConstInstruction extends NumericConstInstruction<OpCodes.i64_const> {
+    public override get stack(): StackEdit { return [ [], [ Types.Type.i64 ] ] }
     public constructor(value: number | bigint = 0) {super(OpCodes.i64_const, value as number); }
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
         super.encode(encoder, context);
@@ -1035,6 +1100,7 @@ export class I64ConstInstruction extends NumericConstInstruction<OpCodes.i64_con
 }
 I64ConstInstruction.registerInstruction(OpCodes.i64_const);
 export class F32ConstInstruction extends NumericConstInstruction<OpCodes.f32_const> {
+    public override get stack(): StackEdit { return [ [], [ Types.Type.f32 ] ] }
     public constructor(value: number = 0) {super(OpCodes.f32_const, value); }
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
         super.encode(encoder, context);
@@ -1046,6 +1112,7 @@ export class F32ConstInstruction extends NumericConstInstruction<OpCodes.f32_con
 }
 F32ConstInstruction.registerInstruction(OpCodes.f32_const)
 export class F64ConstInstruction extends NumericConstInstruction<OpCodes.f64_const> {
+    public override get stack(): StackEdit { return [ [], [ Types.Type.f64 ] ] }
     public constructor(value: number = 0) { super(OpCodes.f64_const, value); }
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
         super.encode(encoder, context);
@@ -1058,31 +1125,37 @@ export class F64ConstInstruction extends NumericConstInstruction<OpCodes.f64_con
 F64ConstInstruction.registerInstruction(OpCodes.f64_const)
 
 export class I32EqualZeroInstruction extends AbstractNumericInstruction<OpCodes.i32_eqz> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_eqz); }
     public static readonly instance = new I32EqualZeroInstruction();
 }
 I32EqualZeroInstruction.registerInstruction(OpCodes.i32_eqz);
 export class I32EqualInstruction extends AbstractNumericInstruction<OpCodes.i32_eq> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_eq); }
     public static readonly instance = new I32EqualInstruction();
 }
 I32EqualInstruction.registerInstruction(OpCodes.i32_eq);
 export class I32NotEqualInstruction extends AbstractNumericInstruction<OpCodes.i32_ne> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_ne); }
     public static readonly instance = new I32NotEqualInstruction();
 }
 I32NotEqualInstruction.registerInstruction(OpCodes.i32_ne);
 export class I32LesserSignedInstruction extends AbstractNumericInstruction<OpCodes.i32_lt_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_lt_s); }
     public static readonly instance = new I32LesserSignedInstruction();
 }
 I32LesserSignedInstruction.registerInstruction(OpCodes.i32_lt_s);
 export class I32LesserUnsignedInstruction extends AbstractNumericInstruction<OpCodes.i32_lt_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_lt_u); }
     public static readonly instance = new I32LesserUnsignedInstruction();
 }
 I32LesserUnsignedInstruction.registerInstruction(OpCodes.i32_lt_u);
 export class I32GreaterSignedInstruction extends AbstractNumericInstruction<OpCodes.i32_gt_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_gt_s); }
     public static readonly instance = new I32GreaterSignedInstruction();
 }
@@ -1093,478 +1166,573 @@ export class I32GreaterUnsignedInstruction extends AbstractNumericInstruction<Op
 }
 I32GreaterUnsignedInstruction.registerInstruction(OpCodes.i32_gt_u);
 export class I32LesserEqualSignedInstruction extends AbstractNumericInstruction<OpCodes.i32_le_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_le_s); }
     public static readonly instance = new I32LesserEqualSignedInstruction();
 }
 I32LesserEqualSignedInstruction.registerInstruction(OpCodes.i32_le_s);
 export class I32LesserEqualUnsignedInstruction extends AbstractNumericInstruction<OpCodes.i32_le_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_le_u); }
     public static readonly instance = new I32LesserEqualUnsignedInstruction();
 }
 I32LesserEqualUnsignedInstruction.registerInstruction(OpCodes.i32_le_u);
 export class I32GreaterEqualSignedInstruction extends AbstractNumericInstruction<OpCodes.i32_ge_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_ge_s); }
     public static readonly instance = new I32GreaterEqualSignedInstruction();
 }
 I32GreaterEqualSignedInstruction.registerInstruction(OpCodes.i32_ge_s);
 export class I32GreaterEqualUnsignedInstruction extends AbstractNumericInstruction<OpCodes.i32_ge_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_ge_u); }
     public static readonly instance = new I32GreaterEqualUnsignedInstruction();
 }
 I32GreaterEqualUnsignedInstruction.registerInstruction(OpCodes.i32_ge_u);
 export class I32LeadingBitsUnsigendInstruction extends AbstractNumericInstruction<OpCodes.i32_clz> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_clz); }
     public static readonly instance = new I32LeadingBitsUnsigendInstruction();
 }
 I32LeadingBitsUnsigendInstruction.registerInstruction(OpCodes.i32_clz);
 export class I32TrailingBitsUnsigendInstruction extends AbstractNumericInstruction<OpCodes.i32_ctz> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_ctz); }
     public static readonly instance = new I32TrailingBitsUnsigendInstruction();
 }
 I32TrailingBitsUnsigendInstruction.registerInstruction(OpCodes.i32_ctz);
 export class I32BitCountInstruction extends AbstractNumericInstruction<OpCodes.i32_popcnt> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_popcnt); }
     public static readonly instance = new I32BitCountInstruction();
 }
 I32BitCountInstruction.registerInstruction(OpCodes.i32_popcnt);
 export class I32AddInstruction extends AbstractNumericInstruction<OpCodes.i32_add> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_add); }
     public static readonly instance = new I32AddInstruction();
 }
 I32AddInstruction.registerInstruction(OpCodes.i32_add);
 export class I32SubtractInstruction extends AbstractNumericInstruction<OpCodes.i32_sub> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_sub); }
     public static readonly instance = new I32SubtractInstruction();
 }
 I32SubtractInstruction.registerInstruction(OpCodes.i32_sub);
 export class I32MultiplyInstruction extends AbstractNumericInstruction<OpCodes.i32_mul> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_mul); }
     public static readonly instance = new I32MultiplyInstruction();
 }
 I32MultiplyInstruction.registerInstruction(OpCodes.i32_mul);
 export class I32DivideSignedInstruction extends AbstractNumericInstruction<OpCodes.i32_div_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_div_s); }
     public static readonly instance = new I32DivideSignedInstruction();
 }
 I32DivideSignedInstruction.registerInstruction(OpCodes.i32_div_s);
 export class I32DivideUnsignedInstruction extends AbstractNumericInstruction<OpCodes.i32_div_u> {
     private constructor() { super(OpCodes.i32_div_u); }
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     public static readonly instance = new I32DivideUnsignedInstruction();
 }
 I32DivideUnsignedInstruction.registerInstruction(OpCodes.i32_div_u);
 export class I32RemainderSignedInstruction extends AbstractNumericInstruction<OpCodes.i32_rem_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_rem_s); }
     public static readonly instance = new I32RemainderSignedInstruction();
 }
 I32RemainderSignedInstruction.registerInstruction(OpCodes.i32_rem_s);
 export class I32RemainderUnsignedInstruction extends AbstractNumericInstruction<OpCodes.i32_rem_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_rem_u); }
     public static readonly instance = new I32RemainderUnsignedInstruction();
 }
 I32RemainderUnsignedInstruction.registerInstruction(OpCodes.i32_rem_u);
 export class I32AndInstruction extends AbstractNumericInstruction<OpCodes.i32_and> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_and); }
     public static readonly instance = new I32AndInstruction();
 }
 I32AndInstruction.registerInstruction(OpCodes.i32_and);
 export class I32OrInstruction extends AbstractNumericInstruction<OpCodes.i32_or> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_or); }
     public static readonly instance = new I32OrInstruction();
 }
 I32OrInstruction.registerInstruction(OpCodes.i32_or);
 export class I32XOrInstruction extends AbstractNumericInstruction<OpCodes.i32_xor> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_xor); }
     public static readonly instance = new I32XOrInstruction();
 }
 I32XOrInstruction.registerInstruction(OpCodes.i32_xor);
 export class I32BitShifLeftInstruction extends AbstractNumericInstruction<OpCodes.i32_shl> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_shl); }
     public static readonly instance = new I32BitShifLeftInstruction();
 }
 I32BitShifLeftInstruction.registerInstruction(OpCodes.i32_shl);
 export class I32BitShifRightSignedInstruction extends AbstractNumericInstruction<OpCodes.i32_shr_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_shr_s); }
     public static readonly instance = new I32BitShifRightSignedInstruction();
 }
 I32BitShifRightSignedInstruction.registerInstruction(OpCodes.i32_shr_s);
 export class I32BitShifRightUnsignedInstruction extends AbstractNumericInstruction<OpCodes.i32_shr_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_shr_u); }
     public static readonly instance = new I32BitShifRightUnsignedInstruction();
 }
 I32BitShifRightUnsignedInstruction.registerInstruction(OpCodes.i32_shr_u);
 export class I32BitRotationLeftInstruction extends AbstractNumericInstruction<OpCodes.i32_rotl> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_rotl); }
     public static readonly instance = new I32BitRotationLeftInstruction();
 }
 I32BitRotationLeftInstruction.registerInstruction(OpCodes.i32_rotl);
 export class I32BitRotationRightInstruction extends AbstractNumericInstruction<OpCodes.i32_rotr> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_rotr); }
     public static readonly instance = new I32BitRotationRightInstruction();
 }
 I32BitRotationRightInstruction.registerInstruction(OpCodes.i32_rotr);
 export class I32WrapI64Instruction extends AbstractNumericInstruction<OpCodes.i32_wrap_i64> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_wrap_i64); }
     public static readonly instance = new I32WrapI64Instruction();
 }
 I32WrapI64Instruction.registerInstruction(OpCodes.i32_wrap_i64);
 export class I32TruncateF32SignedInstruction extends AbstractNumericInstruction<OpCodes.i32_trunc_f32_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_trunc_f32_s); }
     public static readonly instance = new I32TruncateF32SignedInstruction();
 }
 I32TruncateF32SignedInstruction.registerInstruction(OpCodes.i32_trunc_f32_s);
 export class I32TruncateF32UnsignedInstruction extends AbstractNumericInstruction<OpCodes.i32_trunc_f32_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_trunc_f32_u); }
     public static readonly instance = new I32TruncateF32UnsignedInstruction();
 }
 I32TruncateF32UnsignedInstruction.registerInstruction(OpCodes.i32_trunc_f32_u);
 export class I32TruncateF64SignedInstruction extends AbstractNumericInstruction<OpCodes.i32_trunc_f64_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_trunc_f64_s); }
     public static readonly instance = new I32TruncateF64SignedInstruction();
 }
 I32TruncateF64SignedInstruction.registerInstruction(OpCodes.i32_trunc_f64_s);
 export class I32TruncateF64UnsignedInstruction extends AbstractNumericInstruction<OpCodes.i32_trunc_f64_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_trunc_f64_u); }
     public static readonly instance = new I32TruncateF64UnsignedInstruction();
 }
 I32TruncateF64UnsignedInstruction.registerInstruction(OpCodes.i32_trunc_f64_u);
 export class I32ReinterpretF32Instruction extends AbstractNumericInstruction<OpCodes.i32_reinterpret_f32> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_reinterpret_f32); }
     public static readonly instance = new I32ReinterpretF32Instruction();
 }
 I32ReinterpretF32Instruction.registerInstruction(OpCodes.i32_reinterpret_f32);
 export class I32Extend8SignedInstruction extends AbstractNumericInstruction<OpCodes.i32_extend8_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_extend8_s); }
     public static readonly instance = new I32Extend8SignedInstruction();
 }
 I32Extend8SignedInstruction.registerInstruction(OpCodes.i32_extend8_s);
 export class I32Extend16SignedInstruction extends AbstractNumericInstruction<OpCodes.i32_extend16_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i32_extend16_s); }
     public static readonly instance = new I32Extend16SignedInstruction();
 }
 I32Extend16SignedInstruction.registerInstruction(OpCodes.i32_extend16_s);
 
 export class I64EqualZeroInstruction extends AbstractNumericInstruction<OpCodes.i64_eqz> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_eqz); }
     public static readonly instance = new I64EqualZeroInstruction();
 }
 I64EqualZeroInstruction.registerInstruction(OpCodes.i64_eqz);
 export class I64EqualInstruction extends AbstractNumericInstruction<OpCodes.i64_eq> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_eq); }
     public static readonly instance = new I64EqualInstruction();
 }
 I64EqualInstruction.registerInstruction(OpCodes.i64_eq);
 export class I64NotEqualInstruction extends AbstractNumericInstruction<OpCodes.i64_ne> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_ne); }
     public static readonly instance = new I64NotEqualInstruction();
 }
 I64NotEqualInstruction.registerInstruction(OpCodes.i64_ne);
 export class I64LesserSignedInstruction extends AbstractNumericInstruction<OpCodes.i64_lt_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_lt_s); }
     public static readonly instance = new I64LesserSignedInstruction();
 }
 I64LesserSignedInstruction.registerInstruction(OpCodes.i64_lt_s);
 export class I64LesserUnsignedInstruction extends AbstractNumericInstruction<OpCodes.i64_lt_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_lt_u); }
     public static readonly instance = new I64LesserUnsignedInstruction();
 }
 I64LesserUnsignedInstruction.registerInstruction(OpCodes.i64_lt_u);
 export class I64GreaterSignedInstruction extends AbstractNumericInstruction<OpCodes.i64_gt_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_gt_s); }
     public static readonly instance = new I64GreaterSignedInstruction();
 }
 I64GreaterSignedInstruction.registerInstruction(OpCodes.i64_gt_s);
 export class I64GreaterUnsignedInstruction extends AbstractNumericInstruction<OpCodes.i64_gt_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_gt_u); }
     public static readonly instance = new I64GreaterUnsignedInstruction();
 }
 I64GreaterUnsignedInstruction.registerInstruction(OpCodes.i64_gt_u);
 export class I64LesserEqualSignedInstruction extends AbstractNumericInstruction<OpCodes.i64_le_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_le_s); }
     public static readonly instance = new I64LesserEqualSignedInstruction();
 }
 I64LesserEqualSignedInstruction.registerInstruction(OpCodes.i64_le_s);
 export class I64LesserEqualUnsignedInstruction extends AbstractNumericInstruction<OpCodes.i64_le_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_le_u); }
     public static readonly instance = new I64LesserEqualUnsignedInstruction();
 }
 I64LesserEqualUnsignedInstruction.registerInstruction(OpCodes.i64_le_u);
 export class I64GreaterEqualSignedInstruction extends AbstractNumericInstruction<OpCodes.i64_ge_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_ge_s); }
     public static readonly instance = new I64GreaterEqualSignedInstruction();
 }
 I64GreaterEqualSignedInstruction.registerInstruction(OpCodes.i64_ge_s);
 export class I64GreaterEqualUnsignedInstruction extends AbstractNumericInstruction<OpCodes.i64_ge_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_ge_u); }
     public static readonly instance = new I64GreaterEqualUnsignedInstruction();
 }
 I64GreaterEqualUnsignedInstruction.registerInstruction(OpCodes.i64_ge_u);
 export class I64LeadingBitsUnsigendInstruction extends AbstractNumericInstruction<OpCodes.i64_clz> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_clz); }
     public static readonly instance = new I64LeadingBitsUnsigendInstruction();
 }
 I64LeadingBitsUnsigendInstruction.registerInstruction(OpCodes.i64_clz);
 export class I64TrailingBitsUnsigendInstruction extends AbstractNumericInstruction<OpCodes.i64_ctz> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_ctz); }
     public static readonly instance = new I64TrailingBitsUnsigendInstruction();
 }
 I64TrailingBitsUnsigendInstruction.registerInstruction(OpCodes.i64_ctz);
 export class I64BitCountInstruction extends AbstractNumericInstruction<OpCodes.i64_popcnt> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_popcnt); }
     public static readonly instance = new I64BitCountInstruction();
 }
 I64BitCountInstruction.registerInstruction(OpCodes.i64_popcnt);
 export class I64AddInstruction extends AbstractNumericInstruction<OpCodes.i64_add> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_add); }
     public static readonly instance = new I64AddInstruction();
 }
 I64AddInstruction.registerInstruction(OpCodes.i64_add);
 export class I64SubtractInstruction extends AbstractNumericInstruction<OpCodes.i64_sub> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_sub); }
     public static readonly instance = new I64SubtractInstruction();
 }
 I64SubtractInstruction.registerInstruction(OpCodes.i64_sub);
 export class I64MultiplyInstruction extends AbstractNumericInstruction<OpCodes.i64_mul> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_mul); }
     public static readonly instance = new I64MultiplyInstruction();
 }
 I64MultiplyInstruction.registerInstruction(OpCodes.i64_mul);
 export class I64DivideSignedInstruction extends AbstractNumericInstruction<OpCodes.i64_div_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_div_s); }
     public static readonly instance = new I64DivideSignedInstruction();
 }
 I64DivideSignedInstruction.registerInstruction(OpCodes.i64_div_s);
 export class I64DivideUnsignedInstruction extends AbstractNumericInstruction<OpCodes.i64_div_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_div_u); }
     public static readonly instance = new I64DivideUnsignedInstruction();
 }
 I64DivideUnsignedInstruction.registerInstruction(OpCodes.i64_div_u);
 export class I64RemainderSignedInstruction extends AbstractNumericInstruction<OpCodes.i64_rem_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_rem_s); }
     public static readonly instance = new I64RemainderSignedInstruction();
 }
 I64RemainderSignedInstruction.registerInstruction(OpCodes.i64_rem_s);
 export class I64RemainderUnsignedInstruction extends AbstractNumericInstruction<OpCodes.i64_rem_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_rem_u); }
     public static readonly instance = new I64RemainderUnsignedInstruction();
 }
 I64RemainderUnsignedInstruction.registerInstruction(OpCodes.i64_rem_u);
 export class I64AndInstruction extends AbstractNumericInstruction<OpCodes.i64_and> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_and); }
     public static readonly instance = new I64AndInstruction();
 }
 I64AndInstruction.registerInstruction(OpCodes.i64_and);
 export class I64OrInstruction extends AbstractNumericInstruction<OpCodes.i64_or> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_or); }
     public static readonly instance = new I64OrInstruction();
 }
 I64OrInstruction.registerInstruction(OpCodes.i64_or);
 export class I64XOrInstruction extends AbstractNumericInstruction<OpCodes.i64_xor> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_xor); }
     public static readonly instance = new I64XOrInstruction();
 }
 I64XOrInstruction.registerInstruction(OpCodes.i64_xor);
 export class I64BitShifLeftInstruction extends AbstractNumericInstruction<OpCodes.i64_shl> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_shl); }
     public static readonly instance = new I64BitShifLeftInstruction();
 }
 I64BitShifLeftInstruction.registerInstruction(OpCodes.i64_shl);
 export class I64BitShifRightSignedInstruction extends AbstractNumericInstruction<OpCodes.i64_shr_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_shr_s); }
     public static readonly instance = new I64BitShifRightSignedInstruction();
 }
 I64BitShifRightSignedInstruction.registerInstruction(OpCodes.i64_shr_s);
 export class I64BitShifRightUnsignedInstruction extends AbstractNumericInstruction<OpCodes.i64_shr_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_shr_u); }
     public static readonly instance = new I64BitShifRightUnsignedInstruction();
 }
 I64BitShifRightUnsignedInstruction.registerInstruction(OpCodes.i64_shr_u);
 export class I64BitRotationLeftInstruction extends AbstractNumericInstruction<OpCodes.i64_rotl> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_rotl); }
     public static readonly instance = new I64BitRotationLeftInstruction();
 }
 I64BitRotationLeftInstruction.registerInstruction(OpCodes.i64_rotl);
 export class I64BitRotationRightInstruction extends AbstractNumericInstruction<OpCodes.i64_rotr> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64, Types.Type.i64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.i64_rotr); }
     public static readonly instance = new I64BitRotationRightInstruction();
 }
 I64BitRotationRightInstruction.registerInstruction(OpCodes.i64_rotr);
 export class I64ExtendI32SignedInstruction extends AbstractNumericInstruction<OpCodes.i64_extend_i32_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i64 ] ] }
     private constructor() { super(OpCodes.i64_extend_i32_s); }
     public static readonly instance = new I64ExtendI32SignedInstruction();
 }
 I64ExtendI32SignedInstruction.registerInstruction(OpCodes.i64_extend_i32_s);
 export class I64ExtendI32UnsignedInstruction extends AbstractNumericInstruction<OpCodes.i64_extend_i32_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i64 ] ] }
     private constructor() { super(OpCodes.i64_extend_i32_u); }
     public static readonly instance = new I64ExtendI32UnsignedInstruction();
 }
 I64ExtendI32UnsignedInstruction.registerInstruction(OpCodes.i64_extend_i32_u);
 export class I64TruncateF32SignedInstruction extends AbstractNumericInstruction<OpCodes.i64_trunc_f32_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.i64 ] ] }
     private constructor() { super(OpCodes.i64_trunc_f32_s); }
     public static readonly instance = new I64TruncateF32SignedInstruction();
 }
 I64TruncateF32SignedInstruction.registerInstruction(OpCodes.i64_trunc_f32_s);
 export class I64TruncateF32UnsignedInstruction extends AbstractNumericInstruction<OpCodes.i64_trunc_f32_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.i64 ] ] }
     private constructor() { super(OpCodes.i64_trunc_f32_u); }
     public static readonly instance = new I64TruncateF32UnsignedInstruction();
 }
 I64TruncateF32UnsignedInstruction.registerInstruction(OpCodes.i64_trunc_f32_u);
 export class I64TruncateF64SignedInstruction extends AbstractNumericInstruction<OpCodes.i64_trunc_f64_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.i64 ] ] }
     private constructor() { super(OpCodes.i64_trunc_f64_s); }
     public static readonly instance = new I64TruncateF64SignedInstruction();
 }
 I64TruncateF64SignedInstruction.registerInstruction(OpCodes.i64_trunc_f64_s);
 export class I64TruncateF64UnsignedInstruction extends AbstractNumericInstruction<OpCodes.i64_trunc_f64_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.i64 ] ] }
     private constructor() { super(OpCodes.i64_trunc_f64_u); }
     public static readonly instance = new I64TruncateF64UnsignedInstruction();
 }
 I64TruncateF64UnsignedInstruction.registerInstruction(OpCodes.i64_trunc_f64_u);
 export class I64ReinterpretF64Instruction extends AbstractNumericInstruction<OpCodes.i64_reinterpret_f64> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.i64 ] ] }
     private constructor() { super(OpCodes.i64_reinterpret_f64); }
     public static readonly instance = new I64ReinterpretF64Instruction();
 }
 I64ReinterpretF64Instruction.registerInstruction(OpCodes.i64_reinterpret_f64);
 export class I64Extend8SignedInstruction extends AbstractNumericInstruction<OpCodes.i64_extend8_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64 ], [ Types.Type.i64 ] ] }
     private constructor() { super(OpCodes.i64_extend8_s); }
     public static readonly instance = new I64Extend8SignedInstruction();
 }
 I64Extend8SignedInstruction.registerInstruction(OpCodes.i64_extend8_s);
 export class I64Extend16SignedInstruction extends AbstractNumericInstruction<OpCodes.i64_extend16_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64 ], [ Types.Type.i64 ] ] }
     private constructor() { super(OpCodes.i64_extend16_s); }
     public static readonly instance = new I64Extend16SignedInstruction();
 }
 I64Extend16SignedInstruction.registerInstruction(OpCodes.i64_extend16_s);
 export class I64Extend32SignedInstruction extends AbstractNumericInstruction<OpCodes.i64_extend32_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64 ], [ Types.Type.i64 ] ] }
     private constructor() { super(OpCodes.i64_extend32_s); }
     public static readonly instance = new I64Extend32SignedInstruction();
 }
 I64Extend32SignedInstruction.registerInstruction(OpCodes.i64_extend32_s);
 
 export class F32EqualInstruction extends AbstractNumericInstruction<OpCodes.f32_eq> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32, Types.Type.f32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.f32_eq); }
     public static readonly instance = new F32EqualInstruction();
 }
 F32EqualInstruction.registerInstruction(OpCodes.f32_eq);
 export class F32NotEqualInstruction extends AbstractNumericInstruction<OpCodes.f32_ne> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32, Types.Type.f32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.f32_ne); }
     public static readonly instance = new F32NotEqualInstruction();
 }
 F32NotEqualInstruction.registerInstruction(OpCodes.f32_ne);
 export class F32LesserInstruction extends AbstractNumericInstruction<OpCodes.f32_lt> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32, Types.Type.f32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.f32_lt); }
     public static readonly instance = new F32LesserInstruction();
 }
 F32LesserInstruction.registerInstruction(OpCodes.f32_lt);
 export class F32GreaterInstruction extends AbstractNumericInstruction<OpCodes.f32_gt> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32, Types.Type.f32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.f32_gt); }
     public static readonly instance = new F32GreaterInstruction();
 }
 F32GreaterInstruction.registerInstruction(OpCodes.f32_gt);
 export class F32LesserEqualInstruction extends AbstractNumericInstruction<OpCodes.f32_le> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32, Types.Type.f32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.f32_le); }
     public static readonly instance = new F32LesserEqualInstruction();
 }
 F32LesserEqualInstruction.registerInstruction(OpCodes.f32_le);
 export class F32GreaterEqualInstruction extends AbstractNumericInstruction<OpCodes.f32_ge> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32, Types.Type.f32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.f32_ge); }
     public static readonly instance = new F32GreaterEqualInstruction();
 }
 F32GreaterEqualInstruction.registerInstruction(OpCodes.f32_ge);
 export class F32AbsoluteInstruction extends AbstractNumericInstruction<OpCodes.f32_abs> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_abs); }
     public static readonly instance = new F32AbsoluteInstruction();
 }
 F32AbsoluteInstruction.registerInstruction(OpCodes.f32_abs);
 export class F32NegativeInstruction extends AbstractNumericInstruction<OpCodes.f32_neg> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_neg); }
     public static readonly instance = new F32NegativeInstruction();
 }
 F32NegativeInstruction.registerInstruction(OpCodes.f32_neg);
 export class F32CeilInstruction extends AbstractNumericInstruction<OpCodes.f32_ceil> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_ceil); }
     public static readonly instance = new F32CeilInstruction();
 }
 F32CeilInstruction.registerInstruction(OpCodes.f32_ceil);
 export class F32FloorInstruction extends AbstractNumericInstruction<OpCodes.f32_floor> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_floor); }
     public static readonly instance = new F32FloorInstruction();
 }
 F32FloorInstruction.registerInstruction(OpCodes.f32_floor);
 export class F32TruncateInstruction extends AbstractNumericInstruction<OpCodes.f32_trunc> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_trunc); }
     public static readonly instance = new F32TruncateInstruction();
 }
 F32TruncateInstruction.registerInstruction(OpCodes.f32_trunc);
 export class F32NearestInstruction extends AbstractNumericInstruction<OpCodes.f32_nearest> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_nearest); }
     public static readonly instance = new F32NearestInstruction();
 }
 F32NearestInstruction.registerInstruction(OpCodes.f32_nearest);
 export class F32SquareRootInstruction extends AbstractNumericInstruction<OpCodes.f32_sqrt> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_sqrt); }
     public static readonly instance = new F32SquareRootInstruction();
 }
 F32SquareRootInstruction.registerInstruction(OpCodes.f32_sqrt);
 export class F32AddInstruction extends AbstractNumericInstruction<OpCodes.f32_add> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32, Types.Type.f32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_add); }
     public static readonly instance = new F32AddInstruction();
 }
 F32AddInstruction.registerInstruction(OpCodes.f32_add);
 export class F32SubtractInstruction extends AbstractNumericInstruction<OpCodes.f32_sub> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32, Types.Type.f32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_sub); }
     public static readonly instance = new F32SubtractInstruction();
 }
 F32SubtractInstruction.registerInstruction(OpCodes.f32_sub);
 export class F32MultiplyInstruction extends AbstractNumericInstruction<OpCodes.f32_mul> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32, Types.Type.f32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_mul); }
     public static readonly instance = new F32MultiplyInstruction();
 }
 F32MultiplyInstruction.registerInstruction(OpCodes.f32_mul);
 export class F32DivideInstruction extends AbstractNumericInstruction<OpCodes.f32_div> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32, Types.Type.f32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_div); }
     public static readonly instance = new F32DivideInstruction();
 }
 F32DivideInstruction.registerInstruction(OpCodes.f32_div);
 export class F32MinInstruction extends AbstractNumericInstruction<OpCodes.f32_min> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32, Types.Type.f32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_min); }
     public static readonly instance = new F32MinInstruction();
 }
 F32MinInstruction.registerInstruction(OpCodes.f32_min);
 export class F32MaxInstruction extends AbstractNumericInstruction<OpCodes.f32_max> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32, Types.Type.f32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_max); }
     public static readonly instance = new F32MaxInstruction();
 }
 F32MaxInstruction.registerInstruction(OpCodes.f32_max);
 export class F32CopySignInstruction extends AbstractNumericInstruction<OpCodes.f32_copysign> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32, Types.Type.f32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_copysign); }
     public static readonly instance = new F32CopySignInstruction();
 }
 F32CopySignInstruction.registerInstruction(OpCodes.f32_copysign);
 export class F32ConvertI32SignedInstruction extends AbstractNumericInstruction<OpCodes.f32_convert_i32_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_convert_i32_s); }
     public static readonly instance = new F32ConvertI32SignedInstruction();
 }
 F32ConvertI32SignedInstruction.registerInstruction(OpCodes.f32_convert_i32_s);
 export class F32ConvertI32UnsignedInstruction extends AbstractNumericInstruction<OpCodes.f32_convert_i32_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_convert_i32_u); }
     public static readonly instance = new F32ConvertI32UnsignedInstruction();
 }
 F32ConvertI32UnsignedInstruction.registerInstruction(OpCodes.f32_convert_i32_u);
 export class F32ConvertI64SignedInstruction extends AbstractNumericInstruction<OpCodes.f32_convert_i64_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_convert_i64_s); }
     public static readonly instance = new F32ConvertI64SignedInstruction();
 }
 F32ConvertI64SignedInstruction.registerInstruction(OpCodes.f32_convert_i64_s);
 export class F32ConvertI64UnsignedInstruction extends AbstractNumericInstruction<OpCodes.f32_convert_i64_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_convert_i64_u); }
     public static readonly instance = new F32ConvertI64UnsignedInstruction();
 }
 F32ConvertI64UnsignedInstruction.registerInstruction(OpCodes.f32_convert_i64_u);
 export class F32DemoteF64Instruction extends AbstractNumericInstruction<OpCodes.f32_demote_f64> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_demote_f64); }
     public static readonly instance = new F32DemoteF64Instruction();
 }
 F32DemoteF64Instruction.registerInstruction(OpCodes.f32_demote_f64);
 export class F32ReinterpretI32Instruction extends AbstractNumericInstruction<OpCodes.f32_reinterpret_i32> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.f32 ] ] }
     private constructor() { super(OpCodes.f32_reinterpret_i32); }
     public static readonly instance = new F32ReinterpretI32Instruction();
 }
@@ -1576,126 +1744,151 @@ export class F64EqualInstruction extends AbstractNumericInstruction<OpCodes.f64_
 }
 F64EqualInstruction.registerInstruction(OpCodes.f64_eq);
 export class F64NotEqualInstruction extends AbstractNumericInstruction<OpCodes.f64_ne> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64, Types.Type.f64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.f64_ne); }
     public static readonly instance = new F64NotEqualInstruction();
 }
 F64NotEqualInstruction.registerInstruction(OpCodes.f64_ne);
 export class F64LesserInstruction extends AbstractNumericInstruction<OpCodes.f64_lt> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64, Types.Type.f64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.f64_lt); }
     public static readonly instance = new F64LesserInstruction();
 }
 F64LesserInstruction.registerInstruction(OpCodes.f64_lt);
 export class F64GreaterInstruction extends AbstractNumericInstruction<OpCodes.f64_gt> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64, Types.Type.f64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.f64_gt); }
     public static readonly instance = new F64GreaterInstruction();
 }
 F64GreaterInstruction.registerInstruction(OpCodes.f64_gt);
 export class F64LesserEqualInstruction extends AbstractNumericInstruction<OpCodes.f64_le> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64, Types.Type.f64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.f64_le); }
     public static readonly instance = new F64LesserEqualInstruction();
 }
 F64LesserEqualInstruction.registerInstruction(OpCodes.f64_le);
 export class F64GreaterEqualInstruction extends AbstractNumericInstruction<OpCodes.f64_ge> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64, Types.Type.f64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(OpCodes.f64_ge); }
     public static readonly instance = new F64GreaterEqualInstruction();
 }
 F64GreaterEqualInstruction.registerInstruction(OpCodes.f64_ge);
 export class F64AbsoluteInstruction extends AbstractNumericInstruction<OpCodes.f64_abs> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_abs); }
     public static readonly instance = new F64AbsoluteInstruction();
 }
 F64AbsoluteInstruction.registerInstruction(OpCodes.f64_abs);
 export class F64NegativeInstruction extends AbstractNumericInstruction<OpCodes.f64_neg> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_neg); }
     public static readonly instance = new F64NegativeInstruction();
 }
 F64NegativeInstruction.registerInstruction(OpCodes.f64_neg);
 export class F64CeilInstruction extends AbstractNumericInstruction<OpCodes.f64_ceil> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_ceil); }
     public static readonly instance = new F64CeilInstruction();
 }
 F64CeilInstruction.registerInstruction(OpCodes.f64_ceil);
 export class F64FloorInstruction extends AbstractNumericInstruction<OpCodes.f64_floor> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_floor); }
     public static readonly instance = new F64FloorInstruction();
 }
 F64FloorInstruction.registerInstruction(OpCodes.f64_floor);
 export class F64TruncateInstruction extends AbstractNumericInstruction<OpCodes.f64_trunc> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_trunc); }
     public static readonly instance = new F64TruncateInstruction();
 }
 F64TruncateInstruction.registerInstruction(OpCodes.f64_trunc);
 export class F64NearestInstruction extends AbstractNumericInstruction<OpCodes.f64_nearest> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_nearest); }
     public static readonly instance = new F64NearestInstruction();
 }
 F64NearestInstruction.registerInstruction(OpCodes.f64_nearest);
 export class F64SquareRootInstruction extends AbstractNumericInstruction<OpCodes.f64_sqrt> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_sqrt); }
     public static readonly instance = new F64SquareRootInstruction();
 }
 F64SquareRootInstruction.registerInstruction(OpCodes.f64_sqrt);
 export class F64AddInstruction extends AbstractNumericInstruction<OpCodes.f64_add> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64, Types.Type.f64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_add); }
     public static readonly instance = new F64AddInstruction();
 }
 F64AddInstruction.registerInstruction(OpCodes.f64_add);
 export class F64SubtractInstruction extends AbstractNumericInstruction<OpCodes.f64_sub> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64, Types.Type.f64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_sub); }
     public static readonly instance = new F64SubtractInstruction();
 }
 F64SubtractInstruction.registerInstruction(OpCodes.f64_sub);
 export class F64MultiplyInstruction extends AbstractNumericInstruction<OpCodes.f64_mul> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64, Types.Type.f64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_mul); }
     public static readonly instance = new F64MultiplyInstruction();
 }
 F64MultiplyInstruction.registerInstruction(OpCodes.f64_mul);
 export class F64DivideInstruction extends AbstractNumericInstruction<OpCodes.f64_div> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64, Types.Type.f64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_div); }
     public static readonly instance = new F64DivideInstruction();
 }
 F64DivideInstruction.registerInstruction(OpCodes.f64_div);
 export class F64MinInstruction extends AbstractNumericInstruction<OpCodes.f64_min> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64, Types.Type.f64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_min); }
     public static readonly instance = new F64MinInstruction();
 }
 F64MinInstruction.registerInstruction(OpCodes.f64_min);
 export class F64MaxInstruction extends AbstractNumericInstruction<OpCodes.f64_max> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64, Types.Type.f64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_max); }
     public static readonly instance = new F64MaxInstruction();
 }
 F64MaxInstruction.registerInstruction(OpCodes.f64_max);
 export class F64CopySignInstruction extends AbstractNumericInstruction<OpCodes.f64_copysign> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64, Types.Type.f64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_copysign); }
     public static readonly instance = new F64CopySignInstruction();
 }
 F64CopySignInstruction.registerInstruction(OpCodes.f64_copysign);
 export class F64ConvertI32SignedInstruction extends AbstractNumericInstruction<OpCodes.f64_convert_i32_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_convert_i32_s); }
     public static readonly instance = new F64ConvertI32SignedInstruction();
 }
 F64ConvertI32SignedInstruction.registerInstruction(OpCodes.f64_convert_i32_s);
 export class F64ConvertI32UnsignedInstruction extends AbstractNumericInstruction<OpCodes.f64_convert_i32_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_convert_i32_u); }
     public static readonly instance = new F64ConvertI32UnsignedInstruction();
 }
 F64ConvertI32UnsignedInstruction.registerInstruction(OpCodes.f64_convert_i32_u);
 export class F64ConvertI64SignedInstruction extends AbstractNumericInstruction<OpCodes.f64_convert_i64_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_convert_i64_s); }
     public static readonly instance = new F64ConvertI64SignedInstruction();
 }
 F64ConvertI64SignedInstruction.registerInstruction(OpCodes.f64_convert_i64_s);
 export class F64ConvertI64UnsignedInstruction extends AbstractNumericInstruction<OpCodes.f64_convert_i64_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_convert_i64_u); }
     public static readonly instance = new F64ConvertI64UnsignedInstruction();
 }
 F64ConvertI64UnsignedInstruction.registerInstruction(OpCodes.f64_convert_i64_u);
 export class F64PromoteF32Instruction extends AbstractNumericInstruction<OpCodes.f64_promote_f32> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_promote_f32); }
     public static readonly instance = new F64PromoteF32Instruction();
 }
 F64PromoteF32Instruction.registerInstruction(OpCodes.f64_promote_f32);
 export class F64ReinterpretI64Instruction extends AbstractNumericInstruction<OpCodes.f64_reinterpret_i64> {
+    public override get stack(): StackEdit { return [ [ Types.Type.i64 ], [ Types.Type.f64 ] ] }
     private constructor() { super(OpCodes.f64_reinterpret_i64); }
     public static readonly instance = new F64ReinterpretI64Instruction();
 }
@@ -1715,41 +1908,49 @@ export abstract class NumericTruncateInstruction<O extends NumericTruncateInstru
     }
 }
 export class I32TruncateSaturationF32SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f32_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(ForwardOpCodes.i32_trunc_sat_f32_s); }
     public static readonly instance = new I32TruncateSaturationF32SignedInstruction();
 }
 I32TruncateSaturationF32SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f32_s);
 export class I32TruncateSaturationF64SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f64_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(ForwardOpCodes.i32_trunc_sat_f64_s); }
     public static readonly instance = new I32TruncateSaturationF64SignedInstruction();
 }
 I32TruncateSaturationF64SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f64_s);
 export class I32TruncateSaturationF32UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f32_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.i32 ] ] }
     private constructor() { super(ForwardOpCodes.i32_trunc_sat_f32_u); }
     public static readonly instance = new I32TruncateSaturationF32UnsignedInstruction();
 }
 I32TruncateSaturationF32UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f32_u);
 export class I32TruncateSaturationF64UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f64_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.i32 ] ] }
     private constructor() { super(ForwardOpCodes.i32_trunc_sat_f64_u); }
     public static readonly instance = new I32TruncateSaturationF64UnsignedInstruction();
 }
 I32TruncateSaturationF64UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f64_u);
 export class I64TruncateSaturationF32SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f32_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.i64 ] ] }
     private constructor() { super(ForwardOpCodes.i64_trunc_sat_f32_s); }
     public static readonly instance = new I64TruncateSaturationF32SignedInstruction();
 }
 I64TruncateSaturationF32SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f32_s);
 export class I64TruncateSaturationF64SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f64_s> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.i64 ] ] }
     private constructor() { super(ForwardOpCodes.i64_trunc_sat_f64_s); }
     public static readonly instance = new I64TruncateSaturationF64SignedInstruction();
 }
 I64TruncateSaturationF64SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f64_s);
 export class I64TruncateSaturationF32UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f32_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.i64 ] ] }
     private constructor() { super(ForwardOpCodes.i64_trunc_sat_f32_u); }
     public static readonly instance = new I64TruncateSaturationF32UnsignedInstruction();
 }
 I64TruncateSaturationF32UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f32_u);
 export class I64TruncateSaturationF64UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f64_u> {
+    public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.i64 ] ] }
     private constructor() { super(ForwardOpCodes.i64_trunc_sat_f64_u); }
     public static readonly instance = new I64TruncateSaturationF64UnsignedInstruction();
 }

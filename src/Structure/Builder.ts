@@ -9,28 +9,35 @@ export interface IBuilder<T> { build(): T; }
 export type BuildingCallback<B extends IBuilder<any>> = (builder: Omit<B, 'build'>) => B;
 
 export class ModuleBuilder implements IBuilder<Module> {
-    private _version: number;
-    private _functions: { [key: string]: FunctionDefinition };
-    private _starter: string | null;
-    private _sourcemap: string | null;
+    private _version: number = 1;
+    private _functions: { [key: string]: FunctionDefinition } = {};
+    private _imports: { [key: string]: Sections.ImportDescription } = {};
+    private _starter: string | null = null;
+    private _sourcemap: string | null = null;
 
     public get CurrentVersion(): number { return this._version; }
     
-    public constructor() {
-        this._version = 1;
-        this._functions = {};
-        this._sourcemap = null;
-        this._starter = null;
+    public version(version: number): this { this._version = Math.max(1, Number(version) || 0); return this; }
+
+    public importFunction(module: string, name: string): Sections.ImportDescription | null;
+    public importFunction(module: string, name: string, fn: BuildingCallback<FunctionImporterBuilder>): this;
+    public importFunction(module: string, name: string, fn?: BuildingCallback<FunctionImporterBuilder>): this | Sections.ImportDescription | null {
+        let mn = module + '.' + name;
+        if (!fn) { return this._imports[mn] || null; }
+        this._imports[mn] = fn(new FunctionImporterBuilder(this)).build();
+        return this;
     }
 
-    public version(version: number): this { this._version = Math.max(1, Number(version) || 0); return this; }
-    public function(fn: BuildingCallback<FunctionBuilder>, localName?: string, starter: boolean=false): this {
+    public function(fn: string): FunctionDefinition | null;
+    public function(fn: BuildingCallback<FunctionBuilder>, localName?: string, starter?: boolean): this;
+    public function(fn: BuildingCallback<FunctionBuilder> | string, localName?: string, starter?: boolean): this | FunctionDefinition | null {
+        if (typeof(fn) === 'string') { return this._functions[fn] || null; }
         if (!localName) {
             do { localName = Math.random().toString(16).slice(3); }
             while (localName in this._functions);
         }
         if (localName in this._functions) { throw new Error('Function \'' + localName + '\' already defined in this module'); }
-        this._functions[localName] = fn(new FunctionBuilder()).build();
+        this._functions[localName] = fn(new FunctionBuilder(this)).build();
         if (starter) { this._starter = localName; }
         return this;
     }
@@ -45,48 +52,83 @@ export class ModuleBuilder implements IBuilder<Module> {
 
     public build(): Module {
         let m = new Module(this._version);
+        for (let name in this._imports) {
+            name = name + '';
+            let mn = name.split('.', 2);
+            let im = new Sections.ImportSegment(mn[0]!, mn[1]!, this._imports[name]!);
+            m.ImportSection.add(im, m);
+        }
+        let keys = Object.keys(this._functions);
         for (let name in this._functions) {
-            m.defineFunction(this._functions[name]!);
+            let def = this._functions[name]!;
+            if (def.exported) { m.ExportSection.add(new Sections.ExportSegment(def.exported, def.type)); }
+            m.TypeSection.add(def.type);
+            m.FunctionSection.add(def.type);
+            m.CodeSection.add(new Sections.CodeSegment(def.type, def.body, Object.values(def.locals)));
             if (this._starter === name) {
-                let i = m.TypeSection.indexOf(this._functions[name]!.segment.Signature);
+                let i = m.TypeSection.indexOf(this._functions[name]!.type);
                 if (i != -1) { m.StartSection.Target = m.TypeSection.Types[i]!; }
             }
+            def.references.map(k => keys.indexOf(k))
         }
         if (this._sourcemap) { m.CustomSections.push(new Sections.SourceMapSection(this._sourcemap)); }
         return m;
     }
 }
 
+export class FunctionImporterBuilder implements IBuilder<Types.FunctionType> {
+    private _parameters: Types.ResultType = [];
+    private _results: Types.ResultType = [];
+    private _module: ModuleBuilder;
+    public get module(): ModuleBuilder { return this._module; }
+    public constructor(module: ModuleBuilder) { this._module = module; }
+
+    public parameter(type: Types.ValueType | Types.ValueTypeKey, ...types: (Types.ValueType | Types.ValueTypeKey)[]): this {
+        types.unshift(type);
+        this._parameters.push(...types.map(t => {
+            if (typeof(t) === 'string') { t = Types.Type[t] || t; }
+            if (!Types.validValue(t)) { throw new Error('Invalid parameter Type: ' + t); }
+            return t;
+        }));
+        return this;
+    }
+    public result(type: Types.ValueType | Types.ValueTypeKey, ...types: (Types.ValueType | Types.ValueTypeKey)[]): this {
+        types.unshift(type);
+        this._results.push(...types.map(t => {
+            if (typeof(t) === 'string') { t = Types.Type[t] || t; }
+            if (!Types.validValue(t)) { throw new Error('Invalid result Type: ' + t); }
+            return t;
+        }));
+        return this;
+    }
+    public build(): Types.FunctionType { return new Types.FunctionType(this._parameters, this._results); }
+}
+
 export type FunctionDefinition = {
-    segment: Sections.CodeSegment,
-    export: Sections.ExportSegment | null,
-    imports: Sections.ImportSegment[],
-    globals: Sections.GlobalVariable[]
+    type: Types.FunctionType,
+    body: Expression.Instruction[],
+    locals: Record<string, Types.ValueType>,
+    references: string[],
+    exported: string,
+    name: string 
 };
 export class FunctionBuilder implements IBuilder<FunctionDefinition> {
-    private _parameters: Types.ResultType;
-    private _results: Types.ResultType;
-    private _body: Expression.Instruction[];
-    private _imports: Sections.ImportSegment[]
-    private _globals: { [key: string]: Sections.GlobalVariable };
-    private _locals: { [key: string]: Types.ValueType };
-    private _exported: string;
-    private _name: string;
-
+    private _parameters: Types.ResultType = [];
+    private _results: Types.ResultType = [];
+    private _body: Expression.Instruction[] = [];
+    private _references: string[] = []
+    private _locals: Record<string, Types.ValueType> = {};
+    private _exported: string = '';
+    private _name: string = '';
+    private _module: ModuleBuilder;
+    
+    
     public get exportName(): string | null { return this._exported || null; }
     public get isExported(): boolean { return !!this._exported; }
     public get name(): string { return this._name; }
+    public get module(): ModuleBuilder { return this._module; }
 
-    public constructor() {
-        this._parameters = [];
-        this._results = [];
-        this._body = [];
-        this._imports = [];
-        this._locals = {};
-        this._globals = {}
-        this._exported = '';
-        this._name = '';
-    }
+    public constructor(module: ModuleBuilder) { this._module = module; }
 
     public useName(name: string): this { this._name = name; return this; }
     public exportAs(exported: string | null): this { this._exported = exported || ''; return this; }
@@ -116,7 +158,7 @@ export class FunctionBuilder implements IBuilder<FunctionDefinition> {
     public bodyExpression(...expressions: Exprimible[]): this;
     public bodyExpression(expression: BuildingCallback<ExpressionBuilder> | Exprimible, ...instructions: Exprimible[]): this {
         if (typeof(expression) === 'function') {
-            let exp = expression(new ExpressionBuilder()).build();
+            let exp = expression(new ExpressionBuilder(this)).build();
             this.addInstruction(...exp.Instructions);
         }
         else { this.addInstruction(expression, ...instructions); }
@@ -133,48 +175,14 @@ export class FunctionBuilder implements IBuilder<FunctionDefinition> {
         return this;
     }
 
-    public global(
-        name: string,
-        type: Types.ValueType = Types.Type.i32,
-        constant: boolean = false,
-        ...initialization: [ Expression.Expression | Exprimible | BuildingCallback<ExpressionBuilder> | Expression.Instruction ] | Expression.Instruction[]
-    ): this {
-        name = '' + name;
-        if (name in this._globals) { throw new Error('Function Builder global variable \'' + name + '\' already defined')}
-
-        let init: Expression.Expression;
-        if (initialization.length === 1) {
-            let i = initialization[0]!;
-            if (i instanceof Expression.Instruction) { init = new Expression.Expression([ i ]); }
-            else if (i instanceof Expression.Expression) { init = i; }
-            else if (typeof(i) === 'function') { init = i(new ExpressionBuilder()).build(); }
-            else if ('instance' in i && i.instance instanceof Expression.Instruction) { init = new Expression.Expression([ i.instance ]); }
-            else { throw new Error('Function Builder invalid argument for global initialization'); }
-        }
-        else {
-            if (initialization.some(i => !(i instanceof Expression.Instruction))) {
-                throw new Error('Function Builder invalid argument for global initialization');
-            }
-            init = new Expression.Expression(initialization as Expression.Instruction[]);
-        }
-        this._globals[name] = new Sections.GlobalVariable(type, init, constant, name);
-        return this;
-    }
-
     public build(): FunctionDefinition {
-        let type = new Types.FunctionType(this._parameters, this._results, this._name);
         return {
-            export: this._exported ? new Sections.ExportSegment(
-                this._exported,
-                type
-            ) : null,
-            segment: new Sections.CodeSegment(
-                type,
-                this._body.slice(),
-                Object.values(this._locals)
-            ),
-            imports: this._imports.slice(),
-            globals: Object.values(this._globals)
+            type: new Types.FunctionType(this._parameters, this._results),
+            body: this._body.slice(),
+            locals: Object.assign({}, this._locals),
+            references: this._references.slice(),
+            exported: this._exported,
+            name: this._name
         };
     }
 }
@@ -190,14 +198,17 @@ export class ExpressionBuilder implements IBuilder<Expression.Expression> {
     private _instructions: Expression.Instruction[];
     private _labels: { [key: string]: Expression.AbstractBlockInstruction };
     private _parent: ExpressionBuilder | null;
+    private _function: FunctionBuilder;
 
     public get labels(): { [key: string]: Expression.AbstractBlockInstruction } {
         return Object.assign({}, this._parent && this._parent.labels || {}, this._labels);
     }
+    public get function(): FunctionBuilder { return this._function; }
 
-    public constructor(parent: ExpressionBuilder | null = null) {
+    public constructor(fn: FunctionBuilder, parent: ExpressionBuilder | null = null) {
+        this._function = fn;
         this._instructions = [];
-        this._stack = [[], []];
+        this._stack = [];
         this._labels = { };
         if (parent && !(parent instanceof ExpressionBuilder)) {
             throw new TypeError('Expression Builder parent must be an Expression Builder itself');
@@ -211,7 +222,7 @@ export class ExpressionBuilder implements IBuilder<Expression.Expression> {
                 if ('instance' in i && i.instance instanceof Expression.Instruction) { i = i.instance; }
                 else { throw new Error('Invalid body expression: ' + i); }
             }
-            this._stack[1] = i.evaluate(this._stack[0]);
+            // this._stack = i.evaluate(this._stack);
             this._instructions.push(i);
         })
         return this;
@@ -246,15 +257,15 @@ export class ExpressionBuilder implements IBuilder<Expression.Expression> {
         )
         let block;
         if (typeof(expression) === 'function') {
-            block = expression(new ExpressionBuilder(this)).build().Instructions;
+            block = expression(new ExpressionBuilder(this._function, this)).build().Instructions;
         }
         else { block = [ expression, ...instructions ]; }
         block = block.map(e => e instanceof Expression.Instruction ? e : e.instance);
-        let target = Expression.Instruction.resolveStack(block, this._stack[0]);
+        let target = Expression.Instruction.resolveStack(block, this._stack);
         let type: null | Types.ValueType | Types.FunctionType;
-        if (!target.length && !this._stack[0].length) { type = null; }
-        else if (!this._stack[0].length && target.length === 1) { type = target[0]!; }
-        else { type = new Types.FunctionType(this._stack[0], target); }
+        if (!target.length && !this._stack.length) { type = null; }
+        else if (!this._stack.length && target.length === 1) { type = target[0]!; }
+        else { type = new Types.FunctionType(this._stack, target); }
         let instruction = new Expression.BlockInstruction(type, block);
         if (instructions.indexOf(label) !== -1) { this.label(label, instruction); }
         return this.addInstruction(instruction);
@@ -270,15 +281,15 @@ export class ExpressionBuilder implements IBuilder<Expression.Expression> {
         )
         let block;
         if (typeof(expression) === 'function') {
-            block = expression(new ExpressionBuilder(this)).build().Instructions;
+            block = expression(new ExpressionBuilder(this._function, this)).build().Instructions;
         }
         else { block = [ expression, ...instructions ]; }
         block = block.map(e => e instanceof Expression.Instruction ? e : e.instance);
-        let target = Expression.Instruction.resolveStack(block, this._stack[0]);
+        let target = Expression.Instruction.resolveStack(block, this._stack);
         let type: null | Types.ValueType | Types.FunctionType;
-        if (!target.length && !this._stack[0].length) { type = null; }
-        else if (!this._stack[0].length && target.length === 1) { type = target[0]!; }
-        else { type = new Types.FunctionType(this._stack[0], target); }
+        if (!target.length && !this._stack.length) { type = null; }
+        else if (!this._stack.length && target.length === 1) { type = target[0]!; }
+        else { type = new Types.FunctionType(this._stack, target); }
         let instruction = new Expression.LoopInstruction(type, block);
         if (instructions.indexOf(label) !== -1) { this.label(label, instruction); }
         return this.addInstruction(instruction);
@@ -291,18 +302,18 @@ export class ExpressionBuilder implements IBuilder<Expression.Expression> {
     ): this {
         let tb;
         if (typeof(thenBlock) === 'function') {
-            tb = thenBlock(new ExpressionBuilder(this)).build().Instructions;
+            tb = thenBlock(new ExpressionBuilder(this._function, this)).build().Instructions;
         }
         else { tb = thenBlock; }
         tb = tb.map(e => e instanceof Expression.Instruction ? e : e.instance);
-        let ttarget = Expression.Instruction.resolveStack(tb, this._stack[0]);
+        let ttarget = Expression.Instruction.resolveStack(tb, this._stack);
         let ttype: null | Types.ValueType | Types.FunctionType;
-        if (!ttarget.length && !this._stack[0].length) { ttype = null; }
-        else if (!this._stack[0].length && ttarget.length === 1) { ttype = ttarget[0]!; }
-        else { ttype = new Types.FunctionType(this._stack[0], ttarget); }
+        if (!ttarget.length && !this._stack.length) { ttype = null; }
+        else if (!this._stack.length && ttarget.length === 1) { ttype = ttarget[0]!; }
+        else { ttype = new Types.FunctionType(this._stack, ttarget); }
         let eb;
         if (typeof(elseBlock) === 'function') {
-            eb = elseBlock(new ExpressionBuilder(this)).build().Instructions;
+            eb = elseBlock(new ExpressionBuilder(this._function, this)).build().Instructions;
         }
         else { eb = elseBlock || []; }
         eb = eb.map(e => e instanceof Expression.Instruction ? e : e.instance);
@@ -326,12 +337,20 @@ export class ExpressionBuilder implements IBuilder<Expression.Expression> {
     public return(): this { return this.addInstruction(Expression.ReturnInstruction.instance); }
 
     public call(name: string): this;
-    public call(name: string, extenal: boolean, min?: number, max?: number): this;
+    public call(name: string, external: boolean, min?: number, max?: number): this;
     public call(name: string, external?: boolean, min?: number, max?: number): this {
-        if (typeof(external) === 'undefined') {
-            return this.addInstruction(new Expression.CallInstruction(Types.FunctionType.refer(name)));
+        if (!external) {
+            const fn = this._function.module.function(name);
+            if (!fn) { throw new Error('Function definition not found: \'' + name +'\''); }
+            return this.addInstruction(new Expression.CallInstruction(fn.type));
         }
-        throw new Error('Indirect call not implemented');
+        else {
+            const md = name.split('.', 2);
+            const im = this._function.module.importFunction(md[0]!, md[1]!);
+            if (!im) { throw new Error('Import definition not found: \'' + name +'\''); }
+            else if (!(im instanceof Types.FunctionType)) { throw new Error('Import definition is not a function: \'' + name +'\''); }
+            return this.addInstruction(new Expression.CallInstruction(im));
+        }
         (min || 0) + (max || 0);
     }
 
@@ -346,9 +365,8 @@ export class ExpressionBuilder implements IBuilder<Expression.Expression> {
                     Expression.ReferenceNullInstruction.FunctionRef
             );
         }
-        return this.addInstruction(new Expression.ReferenceFunctionInstruction(
-            Types.FunctionType.refer(ref)
-        ));
+        throw new Error('Reference not implemented');
+        // return this.addInstruction(new Expression.ReferenceFunctionInstruction(ref));
     }
 
     public drop(): this { return this.addInstruction(Expression.DropInstruction.instance); }
@@ -592,10 +610,22 @@ export class ExpressionBuilder implements IBuilder<Expression.Expression> {
         }, type)
     }
 
-    public constInt32(value: number): this { return this.addInstruction(new Expression.I32ConstInstruction(value)); }
-    public constInt64(value: number): this { return this.addInstruction(new Expression.I64ConstInstruction(value)); }
-    public constFloat32(value: number): this { return this.addInstruction(new Expression.F32ConstInstruction(value)); }
-    public constFloat64(value: number): this { return this.addInstruction(new Expression.F64ConstInstruction(value)); }
+    public constInt32(value: number, ...values: number[]): this {
+        values.unshift(value);
+        return this.addInstruction(...values.map(v => new Expression.I32ConstInstruction(v)));
+    }
+    public constInt64(value: number, ...values: number[]): this {
+        values.unshift(value);
+        return this.addInstruction(...values.map(v => new Expression.I64ConstInstruction(v)));
+    }
+    public constFloat32(value: number, ...values: number[]): this {
+        values.unshift(value);
+        return this.addInstruction(...values.map(v => new Expression.F32ConstInstruction(v)));
+    }
+    public constFloat64(value: number, ...values: number[]): this {
+        values.unshift(value);
+        return this.addInstruction(...values.map(v => new Expression.F64ConstInstruction(v)));
+    }
 
     public isZeroInt32(): this { return this.addInstruction(Expression.I32EqualZeroInstruction.instance); }
     public equalInt32(): this { return this.addInstruction(Expression.I32EqualInstruction.instance); }

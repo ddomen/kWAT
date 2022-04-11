@@ -70,6 +70,11 @@ export class TypeSection extends Section<SectionTypes.type> {
         return false;
     }
 
+    
+    public import(type: Types.FunctionType): boolean {
+        return this.add(type);
+    }
+
     protected override contentEncode(encoder: IEncoder): void {
         if (!this.Types.length) { return; }
         encoder.vector(this.Types);
@@ -98,25 +103,15 @@ export class FunctionSection extends Section<SectionTypes.function> {
         return indices;
     }
 
-    public indexOf(fn: Types.FunctionType): number {
-        if (fn.isReference) { return this.Functions.findIndex(f => f === fn || fn.refer(f)); }
-        return this.Functions.indexOf(fn);
-    }
+    public indexOf(fn: Types.FunctionType): number { return this.Functions.findIndex(f => f.equals(fn)); }
 
     public add(fn: Types.FunctionType): boolean {
-        if (!fn.isReference && this.Functions.indexOf(fn) === -1) {
-            this.Functions.push(fn);
-            return true;
-        }
+        if (this.Functions.indexOf(fn) === -1) { this.Functions.push(fn); return true; }
         return false;
     }
 
     public import(fn: Types.FunctionType): boolean {
-        if (!fn.isReference && this.Functions.indexOf(fn) === -1) {
-            this.Functions.unshift(fn);
-            return true;
-        }
-        return false;
+        return this.add(fn);
     }
 
     protected override contentEncode(encoder: IEncoder, context: Module): void {
@@ -327,7 +322,7 @@ export class ImportSegment implements IEncodable<Types.FunctionType[]> {
         return this.Description instanceof Types.GlobalType;
     }
     public get code(): ExchangeDescriptionCode {
-        if (this.isTable()) { return ExchangeDescriptionCode.table}
+        if (this.isTable()) { return ExchangeDescriptionCode.table; }
         else if (this.isMemory()) { return ExchangeDescriptionCode.memory; }
         else if (this.isGlobal()) { return ExchangeDescriptionCode.global; }
         else if (this.isFunction()) { return ExchangeDescriptionCode.function; }
@@ -342,7 +337,7 @@ export class ImportSegment implements IEncodable<Types.FunctionType[]> {
     
     public getIndex(context: Types.FunctionType[], pass?: boolean): number {
         if (!this.isFunction()) { throw new Error('Can not get index from a non-function reference!'); }
-        let index = context.indexOf(this.Description);
+        let index = context.findIndex(x => x.equals(this.Description as Types.FunctionType));
         if (!pass && index < 0) { throw new Error('Invalid function definition index!') }
         return index;
     }
@@ -350,17 +345,10 @@ export class ImportSegment implements IEncodable<Types.FunctionType[]> {
     public equals(other: ImportSegment): boolean {
         return this.Name == other.Name &&
                 this.Module == other.Module &&
-                (
-                    this.Description == other.Description ||
-                    'equals' in this.Description &&
-                    'equals' in other.Description &&
-                    this.Description.equals(other.Description)
-                )
+                this.Description.equals(other.Description)
     }
 
-    public clone(): ImportSegment {
-        return new ImportSegment(this.Module, this.Name, this.Description);
-    }
+    public clone(): ImportSegment { return new ImportSegment(this.Module, this.Name, this.Description); }
 
     public encode(encoder: IEncoder, context: Types.FunctionType[]) {
         if (this.isFunction()) {
@@ -422,9 +410,13 @@ export class ImportSection extends Section<SectionTypes.import> {
         protect(this, 'Imports', [], true);
     }
 
+    public indexOf(target: Types.FunctionType): number {
+        return this.Imports.findIndex(i => i.isFunction() && i.Description.equals(target))
+    }
+
     protected contentEncode(encoder: IEncoder, context: Module): void {
         if (!this.Imports.length) { return; }
-        if (this.Imports.filter(i => i.isFunction()).some(i => i.getIndex(context.TypeSection.Types) < 0 || i.code < 0)) {
+        if (this.Imports.filter(i => i.isFunction()).some(i => context.TypeSection.indexOf(i.Description as Types.FunctionType) < 0 || i.code < 0)) {
             throw new Error('Invalid function definition index');
         }
         encoder.vector(this.Imports, context.TypeSection.Types);
@@ -438,7 +430,7 @@ export class ImportSection extends Section<SectionTypes.import> {
         if (context) {
             let target;
             switch (segment.code) {
-                case ExchangeDescriptionCode.function: target = context.FunctionSection; break
+                case ExchangeDescriptionCode.function: target = context.TypeSection; break
                 case ExchangeDescriptionCode.global: target = context.GlobalSection; break
                 case ExchangeDescriptionCode.memory: target = context.MemorySection; break
                 case ExchangeDescriptionCode.table: target = context.TableSection; break
@@ -541,7 +533,7 @@ export class ExportSection extends Section<SectionTypes.export> {
         protect(this, 'Exports', [], true);
     }
 
-    public add(segment: ExportSegment) {
+    public add(segment: ExportSegment): boolean {
         if (this.Exports.some(e => e.Name == segment.Name)) {
             return false;
         }
@@ -921,9 +913,8 @@ export class CodeSegment implements IEncodable<Module> {
         if (!context.module.FunctionSection.Functions[context.index]) {
             throw new Error('Invalid Code Segment function reference');
         }
-        if (decoder.uint32() != decoder.remaining) {
-            throw new Error('Invalid Code Segment body length');
-        }
+        const len = decoder.uint32();
+        const curr = decoder.remaining;
         let nLocals = decoder.uint32();
         let locals: Types.Type[] = [], n, l;
         for (let i = 0; i < nLocals; ++i) {
@@ -935,6 +926,7 @@ export class CodeSegment implements IEncodable<Module> {
             }
         }
         let body = decoder.decode(Expression, context.module);
+        if (curr - decoder.remaining !== len) { throw new Error('Invalid Code Segment length'); }
         return new CodeSegment(
             context.module.FunctionSection.Functions[context.index++]!,
             body.Instructions, locals as any[]
@@ -961,11 +953,8 @@ export class CodeSection extends Section<SectionTypes.code> {
     
     public contentEncode(encoder: IEncoder, context: Module): void {
         if (
-            this.Codes.length != (
-                context.FunctionSection.Functions.length -
-                context.ImportSection.Imports.filter(i => i.isFunction()).length
-            ) ||
-            this.Codes.some((cs, i) => cs.Signature != context.FunctionSection.Functions[i])
+            this.Codes.length != context.FunctionSection.Functions.length ||
+            this.Codes.some((cs, i) => !cs.Signature.equals(context.FunctionSection.Functions[i]))
         ) { throw new Error('Code Section does not correspond to Function Section!'); }
         encoder.vector(this.Codes, context);
     }

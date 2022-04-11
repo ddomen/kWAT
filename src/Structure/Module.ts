@@ -1,5 +1,5 @@
 import { protect } from '../internal';
-import { BuildingCallback, FunctionBuilder, FunctionDefinition, ModuleBuilder } from './Builder';
+import { BuildingCallback, ModuleBuilder } from './Builder';
 import * as Sections from './Sections';
 import type { IEncoder ,IDecoder, IEncodable } from './Encoder';
 
@@ -64,23 +64,6 @@ export class Module implements IEncodable {
             .uint32(this.Version, true)
             .array(this.Sections, this)
         ;
-    }
-
-    public defineFunction(fn: BuildingCallback<FunctionBuilder> | FunctionDefinition): this {
-        let def = typeof(fn) === 'function' ? fn(new FunctionBuilder()).build() : fn;
-        if (def.export) {
-            if (!this.ExportSection.add(def.export)) {
-                throw new Error('Exported function name already defined');
-            }
-        }
-        this.TypeSection.add(def.segment.Signature);
-        this.FunctionSection.add(def.segment.Signature);
-        this.CodeSection.add(def.segment);
-        def.globals.forEach(g => this.GlobalSection.add(g));
-        def.imports.forEach(i => this.ImportSection.add(i));
-        def.segment.Body.getDefinedTypes().forEach(t => this.TypeSection.add(t));
-        def.segment.Body.getDefinedGlobals().forEach(g => this.GlobalSection.add(g));
-        return this;
     }
 
     public static decode(decoder: IDecoder): Module {
