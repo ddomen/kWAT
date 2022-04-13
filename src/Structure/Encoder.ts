@@ -3,39 +3,53 @@ const zeros = '00000000000000000000000000000000';
 type EncodeType = 'uint8' | 'uint32' | 'uint64' | 'int32' | 'float32' | 'float64';
 type NumericArray = { [key: number]: number, length: number };
 
-export interface IEncodable<C = undefined> {
-    encode(encoder: IEncoder, context: C): any;
+export type Arg<T> = T extends any[] ? T : [T];
+
+export interface IEncodable<Context = any[]> {
+    encode(encoder: IEncoder, ...context: Arg<Context>): any;
 }
 
+export enum Relaxations {
+    /** Write numbers with compression algorithms */
+    Canonical = 'canonical',
+    /** Write numbers as full size */
+    Full      = 'full',
+    /** Write numbers as their original size */
+    None      = 'none',
+}
+export type RelaxationKeys = keyof typeof Relaxations;
+export type Relaxation = Relaxations | RelaxationKeys;
+
 export interface IEncoder {
+    relaxation: Relaxation;
     get size(): number;
     uint8(value: number): this;
-    uint32(value: number, relaxed?: boolean): this;
-    uint64(value: number | bigint, relaxed?: boolean): this;
-    uint64(hi: number, lo: number, relaxed?: boolean): this;
-    int32(value: number, relaxed?: boolean): this;
-    int64(value: number | bigint, relaxed?: boolean): this;
-    int64(hi: number, lo: number, relaxed?: boolean): this;
-    float32(value: number, relaxed?: boolean): this;
-    float64(value: number, relaxed?: boolean): this;
-    vector(value: IEncodable<undefined>[]): this;
-    vector<C>(value: IEncodable<C>[], context: C): this;
+    uint32(value: number, relaxed?: Relaxation): this;
+    uint64(value: number | bigint, relaxed?: Relaxation): this;
+    uint64(hi: number, lo: number, relaxed?: Relaxation): this;
+    int32(value: number, relaxed?: Relaxation): this;
+    int64(value: number | bigint, relaxed?: Relaxation): this;
+    int64(hi: number, lo: number, relaxed?: Relaxation): this;
+    float32(value: number, relaxed?: Relaxation): this;
+    float64(value: number, relaxed?: Relaxation): this;
+    vector(value: IEncodable[]): this;
+    vector<C extends any[] = []>(value: IEncodable<C>[], ...context: C): this;
     vector(value: string, type?: 'utf8'): this;
     vector(value: string[], type?: 'utf8'): this;
     vector(value: number[], type: 'uint64'): this;
-    vector(value: number[], type: 'uint32', relaxed?: boolean): this;
+    vector(value: number[], type: 'uint32', relaxed?: Relaxation): this;
     vector(value: number[], type: EncodeType, ...args: any[]): this;
-    array(value: IEncodable<undefined>[]): this;
-    array<C>(value: IEncodable<C>[], context: C): this;
+    array(value: IEncodable[]): this;
+    array<C extends any[] = []>(value: IEncodable<C>[], ...context: C): this;
     array(value: string, type?: 'utf8'): this;
     array(value: string[], type?: 'utf8'): this;
     array(value: number[], type: 'uint64'): this;
-    array(value: number[], type: 'uint32', relaxed?: boolean): this;
+    array(value: number[], type: 'uint32', relaxed?: Relaxation): this;
     array(value: number[], type: EncodeType, ...args: any[]): this;
     string(value: string): this;
     utf8(value: string): this;
-    encode(value: IEncodable<undefined>): this;
-    encode<C>(value: IEncodable<C>, context: C): this;
+    encode(value: IEncodable): this;
+    encode<C extends any[] = []>(value: IEncodable<C>, ...context: C): this;
     append(data: IEncoder | NumericArray): this;
     spawn(): IEncoder;
     getBuffer(): Uint8Array;
@@ -46,9 +60,9 @@ export type IEncoderCtor = new() => IEncoder;
 //     return (x & 0x80000000) ? (-0x7fffffff + (x & 0x7fffffff) - 1) : x;
 // }
 
-function int64(signed: boolean, hi: number | bigint, lo?: number | boolean, relaxed?: boolean): [ string | number, boolean ] {
+function int64(signed: boolean, hi: number | bigint, lo?: number | Relaxation, relaxed?: Relaxation): [ string | number, Relaxation | undefined ] {
     let value;
-    if ((typeof(lo) === 'undefined' && typeof(relaxed) === 'undefined') || typeof(lo) === 'boolean') {
+    if ((typeof(lo) === 'undefined' && typeof(relaxed) === 'undefined') || typeof(lo) === 'string') {
         if (signed ? (Number(hi) > -0x7fffffff && Number(hi) < 0x7fffffff) : (Number(hi) <= 0xffffffff)) { value = Number(hi); }
         else {
             value = hi.toString(2);
@@ -57,14 +71,14 @@ function int64(signed: boolean, hi: number | bigint, lo?: number | boolean, rela
                 else { value = (zeros + zeros).slice(value.length) + value; }
             }
         }
-        relaxed = !!lo;
+        relaxed = lo || Relaxations.Canonical;
     }
     else if (hi) {
         let h = Number(hi).toString(2), l = Number(lo).toString(2);
         value = zeros.slice(h.length) + h + zeros.slice(l.length) + l;
     }
     else { value = Number(lo); }
-    relaxed = !!relaxed;
+    relaxed = (relaxed || '') in Relaxations ? relaxed : Relaxations.Canonical;
     return [ value, relaxed ];
 }
 
@@ -199,91 +213,131 @@ export class Encoder implements IEncoder {
     private _data: number[] = [];
 
     public get size(): number { return this._data.length; }
+    public relaxation: Relaxation = Relaxations.Canonical;
 
     public getBuffer(): Uint8Array { return new Uint8Array(this._data); }
     
     public uint8(value: number): this { this._data.push(value & 0xff); return this; }
-    public uint32(value: number, relaxed?: boolean): this {
-        if (relaxed) {
-            this._data.push(
-                value          & 0xff,
-                (value >>>  8) & 0xff,
-                (value >>> 16) & 0xff,
-                (value >>> 24) & 0xff
-            )
+    public uint32(value: number, relaxed?: Relaxation): this {
+        switch (relaxed || this.relaxation) {
+            case Relaxations.Full:
+                this._data.push(
+                     value         & 0xff,
+                    (value >>>  8) & 0xff,
+                    (value >>> 16) & 0xff,
+                    (value >>> 24) & 0xff
+                );
+                break;
+            case Relaxations.None:
+                this._data.push(
+                    ( value         & 0x7f) | 0x80,
+                    ((value >>>  7) & 0x7f) | 0x80,
+                    ((value >>> 14) & 0x7f) | 0x80,
+                    ((value >>> 21) & 0x7f) | 0x80,
+                    ((value >>> 28) & 0xff)
+                )
+            case Relaxations.Canonical:
+            default: enc_u_leb128(value, this._data, 32); break;
         }
-        else { enc_u_leb128(value, this._data, 32); }
         return this;
     }
-    public uint64(value: number | bigint, relaxed?: boolean): this;
-    public uint64(hi: number, lo: number, relaxed?: boolean): this;
-    public uint64(hi: number | bigint, lo?: number | boolean, relaxed?: boolean): this {
-        let i = int64(false, hi, lo, relaxed),
-            value = i[0];
+    public uint64(value: number | bigint, relaxed?: Relaxation): this;
+    public uint64(hi: number, lo: number, relaxed?: Relaxation): this;
+    public uint64(hi: number | bigint, lo?: number | Relaxation, relaxed?: Relaxation): this {
+        let i = int64(false, hi, lo, relaxed), value = i[0];
         relaxed = i[1];
-        if (relaxed) {
-            let h, l;
-            if (typeof(value) === 'number') { h = 0; l = value; }
-            else {
-                h = parseInt(value.slice(0, 32), 2);
-                l = parseInt(value.slice(32), 2);
-            } 
-            this._data.push(
-                l          & 0xff,
-                (l >>>  8) & 0xff,
-                (l >>> 16) & 0xff,
-                (l >>> 24) & 0xff,
-                h          & 0xff,
-                (h >>>  8) & 0xff,
-                (h >>> 16) & 0xff,
-                (h >>> 24) & 0xff
-            );
+        switch (relaxed || this.relaxation) {
+            case Relaxations.None: {
+                let h, l;
+                if (typeof(value) === 'number') { h = 0; l = value; }
+                else {
+                    h = parseInt(value.slice(0, 32), 2);
+                    l = parseInt(value.slice(32), 2);
+                } 
+                this._data.push(
+                    l          & 0xff,
+                    (l >>>  8) & 0xff,
+                    (l >>> 16) & 0xff,
+                    (l >>> 24) & 0xff,
+                    h          & 0xff,
+                    (h >>>  8) & 0xff,
+                    (h >>> 16) & 0xff,
+                    (h >>> 24) & 0xff
+                );
+                break;
+            }
+            case Relaxations.Full: {
+                let h, l;
+                if (typeof(value) === 'number') { h = 0; l = value; }
+                else {
+                    h = parseInt(value.slice(0, 32), 2);
+                    l = parseInt(value.slice(32), 2);
+                } 
+                this._data.push(
+                    ( l         & 0x7f) | 0x80,
+                    ((l >>>  8) & 0x7f) | 0x80,
+                    ((l >>> 16) & 0x7f) | 0x80,
+                    ((l >>> 24) & 0x7f) | 0x80,
+                    ( h         & 0x7f) | 0x80,
+                    ((h >>>  8) & 0x7f) | 0x80,
+                    ((h >>> 16) & 0x7f) | 0x80,
+                    ((h >>> 24) & 0xff)
+                );
+                break;
+            }
+            case Relaxations.Canonical:
+            default: enc_u_leb128(value, this._data, 64); break;
         }
-        else { enc_u_leb128(value, this._data, 64); }
         return this;
     }
-    public int32(value: number, relaxed?: boolean): this {
-        if (relaxed) { return this.uint32(value, true); }
-        else { enc_s_leb128(value, this._data); }
-        return this;
+    public int32(value: number, relaxed?: Relaxation): this {
+        relaxed ||= this.relaxation;
+        if (relaxed === Relaxations.Canonical) {
+            enc_s_leb128(value, this._data);
+            return this;
+        }
+        return this.uint32(value, relaxed);
     }
-    public int64(value: number | bigint, relaxed?: boolean): this;
-    public int64(hi: number, lo: number, relaxed?: boolean): this
-    public int64(hi: number | bigint, lo?: number | boolean, relaxed?: boolean): this {
+    public int64(value: number | bigint, relaxed?: Relaxation): this;
+    public int64(hi: number, lo: number, relaxed?: Relaxation): this
+    public int64(hi: number | bigint, lo?: number | Relaxation, relaxed?: Relaxation): this {
         let i = int64(true, hi, lo, relaxed),
             value = i[0];
         relaxed = i[1];
-        if (relaxed) {
-
+        switch (relaxed || this.relaxation) {
+            case Relaxations.Full:
+            case Relaxations.None:
+                throw new Error('Not yet implemented');
+            case Relaxations.Canonical:
+            default: enc_s_leb128(value, this._data, 64); break;
         }
-        else { enc_s_leb128(value, this._data, 64); }
         return this;
     }
     public float32(value: number): this {
-        return this.uint32(enc_32_ieee754_2019(value), true);
+        return this.uint32(enc_32_ieee754_2019(value), Relaxations.None);
     }
     public float64(value: number): this {
-        return this.uint64(...enc_64_ieee754_2019(value));
+        return this.uint64(...enc_64_ieee754_2019(value), Relaxations.None);
     }
 
-    public vector(value: IEncodable<undefined>[]): this;
-    public vector<C>(value: IEncodable<C>[], context: C): this;
+    public vector(value: IEncodable[]): this;
+    public vector<C extends any[] = []>(value: IEncodable<C>[], ...context: C): this;
     public vector(value: string, type?: 'utf8'): this;
     public vector(value: string[], type?: 'utf8'): this;
     public vector(value: number[], type: 'uint64'): this;
-    public vector(value: number[], type: 'uint32', relaxed?: boolean): this;
+    public vector(value: number[], type: 'uint32', relaxed?: Relaxation): this;
     public vector(value: number[], type: EncodeType, ...args: any[]): this;
     public vector(value: string | string[] | number[] | IEncodable[], type?: EncodeType | 'utf8', ...args: any[]): this {
         this.uint32(value.length);
         return this.array(value as any, type as any, ...args);
     }
 
-    public array(value: IEncodable<undefined>[]): this;
-    public array<C>(value: IEncodable<C>[], context: C): this;
+    public array(value: IEncodable[]): this;
+    public array<C extends any[] = []>(value: IEncodable<C>[], ...context: C): this;
     public array(value: string, type?: 'utf8'): this;
     public array(value: string[], type?: 'utf8'): this;
     public array(value: number[], type: 'uint64'): this;
-    public array(value: number[], type: 'uint32', relaxed?: boolean): this;
+    public array(value: number[], type: 'uint32', relaxed?: Relaxation): this;
     public array(value: number[], type: EncodeType, ...args: any[]): this;
     public array(value: string | string[] | number[] | IEncodable[], type?: EncodeType | 'utf8', ...args: any[]): this {
         if (!value.length) { return this; }
@@ -293,7 +347,7 @@ export class Encoder implements IEncoder {
             if (value.some(v => typeof(v) !== 'object' || typeof(v.encode) != 'function')) {
                 throw new Error('Unable to encode non-numeric/non-string/non-compilable/mixed vector');
             }
-            value.forEach(v => this.encode(v as IEncodable, type as any));
+            value.forEach(v => this.encode(v as IEncodable<any[]>, type as any, ...args));
             return this;
         }
         if (value.map(v => typeof(v)).some(v => (v !== 'number' && v !== 'string') || v !== ftype)) {
@@ -315,10 +369,10 @@ export class Encoder implements IEncoder {
         return this;
     }
 
-    public encode(value: IEncodable<undefined>): this;
-    public encode<C>(value: IEncodable<C>, context: C): this;
-    public encode(value: IEncodable, context?: any): this {
-        value.encode(this, context);
+    public encode(value: IEncodable): this;
+    public encode<C extends any[] = []>(value: IEncodable<C>, ...context: C): this;
+    public encode(value: IEncodable<any[]>, ...context: any[]): this {
+        value.encode(this, ...context);
         return this;
     }
 
@@ -331,21 +385,22 @@ export class Encoder implements IEncoder {
     public spawn(): IEncoder { return new Encoder(); }
 }
 
-export interface IDecodable<T, Args extends any[]=[]> {
-    decode(decoder: IDecoder, ...args: Args): T;
+export interface IDecodable<T, Context = any[]> {
+    decode(decoder: IDecoder, ...args: Arg<Context>): T;
 }
 
 export interface IDecoder {
     get size(): number;
     get remaining(): number;
     get offset(): number;
+    relaxation: Relaxation;
     peek(): number;
     uint8(): number;
-    uint32(relaxed?: boolean): number;
-    uint64(relaxed?: boolean): number;
-    int32(relaxed?: boolean): number;
-    float32(relaxed?: boolean): number;
-    float64(relaxed?: boolean): number;
+    uint32(relaxed?: Relaxation): number;
+    uint64(relaxed?: Relaxation): number;
+    int32(relaxed?: Relaxation): number;
+    float32(relaxed?: Relaxation): number;
+    float64(relaxed?: Relaxation): number;
     vector<T>(value: IDecodable<T>): T[];
     vector<T, Args extends any[]>(value: IDecodable<T, Args>, ...args: Args): T[];
     vector(type: 'utf8'): string;
@@ -391,6 +446,7 @@ export class Decoder implements IDecoder {
     public get size(): number { return this._view.byteLength; }
     public get remaining(): number { return this._view.byteLength - this._offset; }
     public get offset(): number { return this._offset; }
+    public relaxation: Relaxation = Relaxations.Canonical;
     public constructor(buffer: ArrayBuffer, offset?: number, bytes?: number) { this._view = new DataView(buffer, offset, bytes); this._offset = 0; }
 
     private _advance(amount: number): number {
@@ -402,21 +458,33 @@ export class Decoder implements IDecoder {
     public peek(): number { return this._view.getUint8(this._offset); }
 
     public uint8(): number { return this._view.getUint8(this._offset++); }
-    public uint32(relaxed?: boolean): number {
-        if (relaxed) { return this._view.getUint32(this._advance(4), true); }
-        return dec_u_leb128(this, 32);
-    }
-    public uint64(relaxed?: boolean): number {
-        if (relaxed) { 
-            let lo = this._view.getUint32(this._advance(4), true).toString(2);
-            let hi = this._view.getUint32(this._advance(4), true).toString(2);
-            return parseInt(zeros.slice(hi.length) + hi + zeros.slice(lo.length) + lo, 2);
+    public uint32(relaxed?: Relaxation): number {
+        switch (relaxed || this.relaxation) {
+            case Relaxations.None: return this._view.getUint32(this._advance(4), true);
+            case Relaxations.Full:
+            case Relaxations.Canonical:
+            default: return dec_u_leb128(this, 32);
         }
-       return dec_u_leb128(this, 64);
     }
-    public int32(relaxed?: boolean): number {
-        if (relaxed) { return this._view.getInt32(this._advance(4), true); }
-        return dec_s_leb128(this, 32)
+    public uint64(relaxed?: Relaxation): number {
+        switch (relaxed || this.relaxation) {
+            case Relaxations.None: { 
+                let lo = this._view.getUint32(this._advance(4), true).toString(2);
+                let hi = this._view.getUint32(this._advance(4), true).toString(2);
+                return parseInt(zeros.slice(hi.length) + hi + zeros.slice(lo.length) + lo, 2);
+            }
+            case Relaxations.Full:
+            case Relaxations.Canonical:
+            default: return dec_u_leb128(this, 64);
+        }
+    }
+    public int32(relaxed?: Relaxation): number {
+        switch (relaxed || this.relaxation) {
+            case Relaxations.None: return this._view.getInt32(this._advance(4), true);
+            case Relaxations.Full:
+            case Relaxations.Canonical:
+            default: return dec_s_leb128(this, 32)
+        }
     }
     public float32(): number { return this._view.getFloat32(this._advance(4)); }
     public float64(): number { return this._view.getFloat64(this._advance(8)); }
@@ -430,10 +498,10 @@ export class Decoder implements IDecoder {
         return this.array(type as IDecodable<T>, length, ...args);
     }
     public array<T>(value: IDecodable<T>, length: number): T[];
-    public array<T, Args extends any[]>(value: IDecodable<T, Args>, length: number, ...args: Args): T[];
+    public array<T, Args = any[]>(value: IDecodable<T, Args>, length: number, ...args: Arg<Args>): T[];
     public array(type: 'utf8', length: number): string;
     public array(type: EncodeType, length: number): number[];
-    public array<T, Args extends any[]>(type: IDecodable<T, Args> | 'utf8' | EncodeType, length: number, ...args: Args): string | number[] | T[] {
+    public array<T, Args = any[]>(type: IDecodable<T, Args> | 'utf8' | EncodeType, length: number, ...args: Arg<Args>): string | number[] | T[] {
         if (type === 'utf8') { return this.utf8(length); }
         else if (typeof(type) === 'string') {
             let result = [];
@@ -454,7 +522,7 @@ export class Decoder implements IDecoder {
             length
         ));
     }
-    public decode<T, Args extends any[]>(value: IDecodable<T, Args>, ...args:Args): T {
+    public decode<T, Args = any[]>(value: IDecodable<T, Args>, ...args: Arg<Args>): T {
         return value.decode(this, ...args);
     }
     public slice(length: number): IDecoder {

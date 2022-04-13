@@ -12,6 +12,9 @@ export class ModuleBuilder implements IBuilder<Module> {
     private _version: number = 1;
     private _functions: { [key: string]: FunctionDefinition } = {};
     private _imports: { [key: string]: Sections.ImportDescription } = {};
+    private _memories: { [key: string]: Types.MemoryType } = {};
+    private _data: { [key: number]: ArrayBuffer } = {};
+    private _globals: { [key: string]: Sections.GlobalVariable } = {};
     private _starter: string | null = null;
     private _sourcemap: string | null = null;
 
@@ -19,23 +22,125 @@ export class ModuleBuilder implements IBuilder<Module> {
     
     public version(version: number): this { this._version = Math.max(1, Number(version) || 0); return this; }
 
-    public importFunction(module: string, name: string): Sections.ImportDescription | null;
+    private randomName(target: { [key: string]: any }): string {
+        let name: string;
+        do { name = Math.random().toString(16).slice(3); }
+        while (name in target);
+        return name;
+    }
+
+    public importMemory(module: string, name: string): Sections.ImportDescription | null;
+    public importMemory(module: string, name: string, min: number, max?: number): this;
+    public importMemory(module: string, name: string, min?: number, max?: number): this | Sections.ImportDescription | null {
+        const mn = module + '.' + name;
+        if (typeof(min) !== 'number') {
+            return this._imports[mn] instanceof Types.LimitType ?
+                    this._imports[mn]! as Types.MemoryType :
+                    null;
+        }
+        this._imports[mn] = new Types.LimitType(min, max);
+        return this;
+    }
+
+    public memory(localName: string): Types.MemoryType | null;
+    public memory(min: number, localName?: string): this;
+    public memory(min: number, max: number, localName?: string): this;
+    public memory(...args: any[]): this | Types.MemoryType | null {
+        let a = args[0], b = args[1], localName = args[2];
+        if (typeof(a) === 'string') { return this._memories[a] || null; }
+        a = Number(a) || 0;
+        if (typeof(b) === 'string') { localName = b; b = undefined; }
+        b = typeof(b) !== 'number' ? undefined : (Number(b) || 0);
+        localName = localName || this.randomName(this._memories);
+        if (localName in this._memories) { throw new Error('Memory \'' + localName + '\' already defined in this module'); }
+        this._memories[localName] = new Types.LimitType(a, b);
+        return this;
+    }
+
+    public data(index: number): Uint8Array | null;
+    public data(index: number, value: ArrayBuffer | Iterable<number> | string): this;
+    public data(index: number, value?: ArrayBuffer | Iterable<number> | string): this | Uint8Array | null {
+        if (typeof(value) === 'undefined') {
+            return this._data[index] ?
+                    new Uint8Array(this._data[index]!) :
+                    null;
+        }
+        else if (typeof(value) === 'string') {
+            const e = new TextEncoder()
+            value = e.encode(value);
+        }
+        if (value instanceof ArrayBuffer) {
+            this._data[index] = value;
+            return this;
+        }
+        if (!ArrayBuffer.isView(value)) {
+            try { value = new Uint8Array(Array.from(value)); } catch {}
+        }
+        if (!ArrayBuffer.isView(value)) {
+            throw new Error('Can not convert value to an Uint8Array');
+        }
+        this._data[index] = value.buffer;
+        return this;
+    }
+
+    public importGlobal(module: string, name: string): Types.GlobalType | null;
+    public importGlobal(module: string, name: string, type: Types.NumberType | Types.NumberTypeKey, constant?: boolean): this;
+    public importGlobal(module: string, name: string, type?: Types.NumberType | Types.NumberTypeKey, constant?: boolean): this | Types.GlobalType | null {
+        const mn = module + '.' + name;
+        if (!type) {
+            return this._imports[mn] instanceof Types.GlobalType ?
+                    this._imports[mn]! as Types.GlobalType :
+                    null;
+        }
+        if (typeof(type) === 'string') { type = Types.Type[type]; }
+        this._imports[mn] = new Types.GlobalType(type, constant);
+        return this;
+    }
+
+    public global(localName: string): Sections.GlobalVariable | null;
+    public global(type: Types.Type.i64 | 'i64', initial: number | bigint, localName?: string, constant?: boolean): this;
+    public global(type: Types.NumberType | Types.NumberTypeKey, initial?: number, localName?: string, constant?: boolean): this;
+    public global(type: string | Types.NumberType | Types.NumberTypeKey, initial?: number | bigint, localName?: string, constant?: boolean): this | Sections.GlobalVariable | null {
+        if (type in Types.Type && typeof(type) === 'string') { type = Types.Type[type as any] as any as Types.NumberType; }
+        if (typeof(type) === 'string') { return this._globals[type] || null; }
+        localName = localName || this.randomName(this._globals);
+        if (localName in this._globals) {
+            throw new Error('Global \'' + localName + '\' already defined in this module');
+        }
+        let i: new(v?: number) => Expression.NumericConstInstruction;
+        switch (type) {
+            case Types.Type.i32: i = Expression.I32ConstInstruction;
+            case Types.Type.i64: i = Expression.I64ConstInstruction;
+            case Types.Type.f32: i = Expression.F32ConstInstruction;
+            case Types.Type.f64: i = Expression.F64ConstInstruction;
+        }
+        this._globals[localName] = new Sections.GlobalVariable(
+            type,
+            new Expression.Expression([ new i(initial as number) ]),
+            constant
+        );
+        return this;
+    }
+
+
+    public importFunction(module: string, name: string): Types.FunctionType | null;
     public importFunction(module: string, name: string, fn: BuildingCallback<FunctionImporterBuilder>): this;
-    public importFunction(module: string, name: string, fn?: BuildingCallback<FunctionImporterBuilder>): this | Sections.ImportDescription | null {
-        let mn = module + '.' + name;
-        if (!fn) { return this._imports[mn] || null; }
+    public importFunction(module: string, name: string, fn?: BuildingCallback<FunctionImporterBuilder>): this | Types.FunctionType | null {
+        const mn = module + '.' + name;
+        if (!fn) {
+            return this._imports[mn] instanceof Types.FunctionType ?
+                    this._imports[mn]! as Types.FunctionType :
+                    null;
+        }
         this._imports[mn] = fn(new FunctionImporterBuilder(this)).build();
         return this;
     }
 
-    public function(fn: string): FunctionDefinition | null;
+    public function(localName: string): FunctionDefinition | null;
     public function(fn: BuildingCallback<FunctionBuilder>, localName?: string, starter?: boolean): this;
     public function(fn: BuildingCallback<FunctionBuilder> | string, localName?: string, starter?: boolean): this | FunctionDefinition | null {
         if (typeof(fn) === 'string') { return this._functions[fn] || null; }
-        if (!localName) {
-            do { localName = Math.random().toString(16).slice(3); }
-            while (localName in this._functions);
-        }
+        localName = localName || this.randomName(this._functions);
         if (localName in this._functions) { throw new Error('Function \'' + localName + '\' already defined in this module'); }
         this._functions[localName] = fn(new FunctionBuilder(this)).build();
         if (starter) { this._starter = localName; }
@@ -51,23 +156,44 @@ export class ModuleBuilder implements IBuilder<Module> {
     public unsetSourceMap(): this { return this.sourceMap(null); }
 
     public build(): Module {
-        let m = new Module(this._version);
-        for (let name in this._imports) {
-            name = name + '';
-            let mn = name.split('.', 2);
-            let im = new Sections.ImportSegment(mn[0]!, mn[1]!, this._imports[name]!);
+        const m = new Module(this._version);
+        const names = new Sections.NameCustomSection();
+        m.CustomSections.push(names);
+        for (const name in this._imports) {
+            const mn = (name + '').split('.', 2);
+            const im = new Sections.ImportSegment(mn[0]!, mn[1]!, this._imports[name]!);
             m.ImportSection.add(im, m);
         }
+        for (const name in this._globals) {
+            const g = this._globals[name]!;
+            const gv = new Sections.GlobalVariable(
+                g.Variable.Type,
+                new Expression.Expression(g.Initialization.Instructions),
+                g.Variable.Constant
+            );
+            m.GlobalSection.add(gv);
+        }
+        for (const _ in this._data) {
+            // const d = this._data[index]!;
+            const ds = new Sections.DataSegment(Sections.DataSegmentKind.passive);
+            throw new Error('Data Sections building not yet implemented');
+            m.DataSection.add(ds)
+        }
+        for (const name in this._memories) {
+            const mm = this._memories[name]!;
+            m.MemorySection.add(new Types.LimitType(mm.Min, mm.Max));
+        }
         let keys = Object.keys(this._functions);
-        for (let name in this._functions) {
-            let def = this._functions[name]!;
+        for (const name in this._functions) {
+            const def = this._functions[name]!;
+            const i = m.TypeSection.indexOf(this._functions[name]!.type);
             if (def.exported) { m.ExportSection.add(new Sections.ExportSegment(def.exported, def.type)); }
             m.TypeSection.add(def.type);
             m.FunctionSection.add(def.type);
             m.CodeSection.add(new Sections.CodeSegment(def.type, def.body, Object.values(def.locals)));
-            if (this._starter === name) {
-                let i = m.TypeSection.indexOf(this._functions[name]!.type);
-                if (i != -1) { m.StartSection.Target = m.TypeSection.Types[i]!; }
+            if (i !== -1) {
+                names.function(new Sections.NameReference(i, name));
+                if (this._starter === name) { m.StartSection.Target = m.TypeSection.Types[i]!; }
             }
             def.references.map(k => keys.indexOf(k))
         }

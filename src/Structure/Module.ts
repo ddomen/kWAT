@@ -1,11 +1,66 @@
 import { protect } from '../internal';
 import { BuildingCallback, ModuleBuilder } from './Builder';
 import * as Sections from './Sections';
-import type { IEncoder ,IDecoder, IEncodable } from './Encoder';
+import { IEncoder ,IDecoder, IEncodable, Relaxations } from './Encoder';
 
 const ModuleMagic = 0x6d736100;
 
-export class Module implements IEncodable {
+const DefaultOptions: WasmOptions = {
+    extendedLEB128: false,
+    debugNames: true,
+    customSections: true,
+
+    exceptions: false,
+    mutableGlobals: true,
+    saturateFloatToInt: false,
+    signExtension: false,
+    SIMD: true,
+    threads: false,
+    multiValue: false,
+    tailCall: false,
+    bulkMemory: false,
+    referenceTypes: false,
+
+    multipleMemory: false,
+    multipleTables: false
+};
+
+export type WasmOptions = {
+    /** Write all LEB128 sizes as 5-bytes instead of their compressed size */
+    extendedLEB128: boolean,
+    /** Consider/ignore name custom section (ignored if customSections is false) */
+    debugNames: boolean,
+    /** Consider/ignore any custom section  (overriddes debugName) */
+    customSections: boolean,
+    
+    /** Experimental exception handling - TODO */
+    exceptions: boolean,
+    /** Import/export mutable globals handling - TODO */
+    mutableGlobals: boolean,
+    /** Include saturating float-to-int instructions - TODO */
+    saturateFloatToInt: boolean,
+    /** Include sign extensions instructions - TODO */
+    signExtension: boolean,
+    /** Include SIMD instructions (Single Instruction Multiple Data)  */
+    SIMD: boolean,
+    /** Experimental threading supports - TODO */
+    threads: boolean,
+    /** Multiple values support - TODO */
+    multiValue: boolean,
+    /** Tail call optimization support - TODO */
+    tailCall: boolean,
+    /** Include bulk memory instructions - TODO */
+    bulkMemory: boolean,
+    /** Include reference type - TODO */
+    referenceTypes: boolean,
+    
+    /** Allow definition of multiple tables */
+    multipleTables: boolean,
+    /** Allow definition of multiple memories */
+    multipleMemory: boolean
+}
+
+export class Module implements IEncodable<WasmOptions> {
 
     public Version: number;
 
@@ -58,20 +113,27 @@ export class Module implements IEncodable {
         protect(this, 'CustomSections', [], true);
     }
 
-    public encode(encoder: IEncoder): void {
-        encoder
-            .uint32(ModuleMagic, true)
-            .uint32(this.Version, true)
-            .array(this.Sections, this)
+    public encode(encoder: IEncoder, options?: Partial<WasmOptions>): void {
+        options = Object.assign({}, DefaultOptions, options)
+        const e = encoder.spawn();
+        e.relaxation = options.extendedLEB128 ? Relaxations.Full : Relaxations.Canonical;
+        let sects = this.Sections;
+        if (!options.debugNames) { sects = sects.filter(s => !(s instanceof Sections.NameCustomSection)); }
+        if (!options.customSections) { sects = sects.filter(s => !(s instanceof Sections.CustomSection)); }
+        e
+            .uint32(ModuleMagic, Relaxations.None)
+            .uint32(this.Version, Relaxations.None)
+            .array(sects, this, options as WasmOptions)
         ;
+        encoder.append(e);
     }
 
     public static decode(decoder: IDecoder): Module {
-        if (decoder.uint32(true) !== ModuleMagic) {
+        if (decoder.uint32(Relaxations.None) !== ModuleMagic) {
             throw new Error('Invalid Module Magic');
         }
         let m = new Module();
-        m.Version = decoder.uint32(true);
+        m.Version = decoder.uint32(Relaxations.None);
         let type: number, size, precedence = 0, slice,
             sections: IDecoder[] = [];
         while (decoder.remaining) {
@@ -97,8 +159,12 @@ export class Module implements IEncodable {
         return m;
     }
 
-    public static readonly Magic: typeof ModuleMagic = ModuleMagic;
     public static build(builder: BuildingCallback<ModuleBuilder>): Module {
         return builder(new ModuleBuilder()).build();
+    }
+    
+    public static get Magic(): typeof ModuleMagic { return ModuleMagic; }
+    public static get DefaultOptions(): typeof DefaultOptions {
+        return Object.assign({}, DefaultOptions);
     }
 }

@@ -1,4 +1,4 @@
-import { SectionTypes, ExchangeDescriptionCode } from './Sections';
+import { SectionTypes, ExchangeDescriptionCode, NameSubSections } from './Sections';
 import { Type } from './Types'
 import { Decoder } from './Encoder';
 import { OpCodes } from '../OpCodes';
@@ -232,6 +232,87 @@ function parseSectionCode(decoder: Decoder): string {
     return result;
 }
 
+function parseSectionCustomName(decoder: Decoder): string {
+    let result = '';
+    while (decoder.remaining) {
+        result += printIndex(decoder) + ': ';
+        const k = read(decoder, d => d.uint8());
+        result += k.value + '\t\t\t; ' + (NameSubSections[k.result] || 'unknown') + ' name subsection\n';
+        result += printIndex(decoder) + ': ';
+        const size = read(decoder, d => d.uint32());
+        result += size.value + '\t\t\t; subsection size (' + size.result + ')\n';
+        const dec = decoder.slice(size.result) as Decoder;
+        switch (k.result) {
+            case NameSubSections.module: {
+                result += printIndex(dec) + ': ';
+                const nLen = read(dec, d => d.uint32());
+                result += nLen.value + '\t\t\t; module name length (' + nLen.result + ')\n';
+                result += printIndex(dec) + ': ';
+                const mod = read(dec, d => d.string(nLen.result));
+                result += mod.value + '\t\t\t; module name ("' + mod.result + '")\n';
+                break;
+            }
+            case NameSubSections.function: {
+                result += printIndex(dec) + ': ';
+                const nFns = read(dec, d => d.uint32());
+                result += nFns.value + '\t\t\t; function names count (' + nFns.result + ')\n';
+                for (let i = 0; i < nFns.result; ++i) {
+                    result += printIndex(dec) + ': ';
+                    const fni = read(dec, d => d.uint32());
+                    result += fni.value + '\t\t\t; function index (' + fni.result + ')\n';
+                    result += printIndex(dec) + ': ';
+                    const fnl = read(dec, d => d.uint32());
+                    result += fnl.value + '\t\t\t; function name length (' + fnl.result + ')\n';
+                    result += printIndex(dec) + ': ';
+                    const fnn = read(dec, d => d.string(fnl.result));
+                    result += fnn.value + '\t\t\t; function name ("' + fnn.result + '")\n';
+                }
+                break;
+            }
+            case NameSubSections.local: {
+                result += printIndex(dec) + ': ';
+                const nFns = read(dec, d => d.uint32());
+                result += nFns.value + '\t\t\t; local functions count (' + nFns.result + ')\n';
+                for (let i = 0; i < nFns.result; ++i) {
+                    result += printIndex(dec) + ': ';
+                    const fni = read(dec, d => d.uint32());
+                    result += fni.value + '\t\t\t; local function index (' + fni.result + ')\n';
+                    result += printIndex(dec) + ': ';
+                    const ll = read(dec, d => d.uint32());
+                    result += ll.value + '\t\t\t; local count (' + ll.result + ')\n';
+                    for (let j = 0; j < ll.result; ++j) {
+                        result += printIndex(dec) + ': ';
+                        const lli = read(dec, d => d.uint32());
+                        result += lli.value + '\t\t\t; local index (' + i + ' | ' + lli.result + ')\n';
+                        result += printIndex(dec) + ': ';
+                        const lnl = read(dec, d => d.uint32());
+                        result += lnl.value + '\t\t\t; local name length (' + lnl.result + ')\n';
+                        result += printIndex(dec) + ': ';
+                        const lnn = read(dec, d => d.string(lnl.result));
+                        result += lnn.value + '\t\t\t; local name ("' + lnn.result + '" | ' + i + ' | ' + j + ')\n';
+                    }
+
+                }
+                break;
+            }
+        }
+    }
+    return result;
+}
+
+function parseSectionCustom(decoder: Decoder): string {
+    let result = printIndex(decoder) + ': ';
+    const lenName = read(decoder, d => d.uint32());
+    result += lenName.value + '\t\t\t; custom section name length (' + lenName.result + ')\n';
+    result += printIndex(decoder) + ': ';
+    const name = read(decoder, d => d.string(lenName.result));
+    result += name.value + '\t\t\t; custom section name  ("' + name.result + '")\n';
+    switch (name.result) {
+        case 'name': result += parseSectionCustomName(decoder); break;
+    }
+    return result;
+}
+
 function parseSection(decoder: Decoder): string {
     const code = read(decoder, d => d.uint8());
     let result = '; section "' + (SectionTypes[code.result] || 'Unknown') + '" (' + code.value + ')\n';
@@ -246,6 +327,7 @@ function parseSection(decoder: Decoder): string {
         case SectionTypes.function: result += parseSectionFunction(slice); break;
         case SectionTypes.export: result += parseSectionExport(slice); break;
         case SectionTypes.code: result += parseSectionCode(slice); break;
+        case SectionTypes.custom: result += parseSectionCustom(slice); break;
         default: result += parseSectionUnknown(slice); break;
     }
     result += parseUnknown(slice);

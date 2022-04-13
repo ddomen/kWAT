@@ -2,7 +2,7 @@ import { protect } from '../internal';
 import { Expression, Instruction } from './Expression';
 import { IEncoder, IDecoder, IEncodable } from './Encoder';
 import * as Types from './Types';
-import type { Module } from './Module';
+import type { Module, WasmOptions } from './Module';
 
 export enum SectionTypes {
     custom           = 0x0,
@@ -20,7 +20,7 @@ export enum SectionTypes {
     dataCount        = 0xc,
 }
 
-export abstract class Section<S extends SectionTypes=SectionTypes> implements IEncodable<Module> {
+export abstract class Section<S extends SectionTypes=SectionTypes> implements IEncodable<[Module, WasmOptions]> {
 
     protected _precedence!: number;
     public readonly Type!: S;
@@ -38,15 +38,15 @@ export abstract class Section<S extends SectionTypes=SectionTypes> implements IE
         else { this._precedence = SectionTypes.dataCount + 1; }
     }
 
-    public encode(encoder: IEncoder, context: Module): void {
+    public encode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         let content = encoder.spawn();
-        this.contentEncode(content, context);
+        this.contentEncode(content, mod, opts);
         if (content.size) { encoder.uint8(this.Type).uint32(content.size).append(content); }
     }
 
-    public abstract decode(decoder: IDecoder, context: Module): void;
+    public abstract decode(decoder: IDecoder, mod: Module): void;
 
-    protected abstract contentEncode(encoder: IEncoder, context: Module): void;
+    protected abstract contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void;
 }
 
 export class TypeSection extends Section<SectionTypes.type> {
@@ -96,8 +96,8 @@ export class FunctionSection extends Section<SectionTypes.function> {
         protect(this, 'Functions', [], true);
     }
 
-    public getIndices(context: Module, pass?: boolean): number[] {
-        let indices = this.Functions.map(f => context.TypeSection.indexOf(f));
+    public getIndices(mod: Module, pass?: boolean): number[] {
+        let indices = this.Functions.map(f => mod.TypeSection.indexOf(f));
         let wrong;
         if (!pass && indices.some(i => (wrong = i, i < 0))) { throw new Error('Invalid function definition index (at: ' + wrong + ')'); }
         return indices;
@@ -114,19 +114,19 @@ export class FunctionSection extends Section<SectionTypes.function> {
         return this.add(fn);
     }
 
-    protected override contentEncode(encoder: IEncoder, context: Module): void {
-        let idxs = this.getIndices(context);
+    protected override contentEncode(encoder: IEncoder, mod: Module): void {
+        let idxs = this.getIndices(mod);
         if (!idxs.length) { return; }
         encoder.vector(idxs, 'uint32');
     }
 
-    public override decode(decoder: IDecoder, context: Module) {
+    public override decode(decoder: IDecoder, mod: Module) {
         let idxs = decoder.vector('uint32'), wrong;
-        if (idxs.some(id => (wrong = id, !context.TypeSection.Types[id]))) {
+        if (idxs.some(id => (wrong = id, !mod.TypeSection.Types[id]))) {
             throw new Error('Invalid index in type section: ' + wrong)
         }
         this.Functions.length = 0;
-        this.Functions.push(...idxs.map(id => context.TypeSection.Types[id]!.clone()));
+        this.Functions.push(...idxs.map(id => mod.TypeSection.Types[id]!.clone()));
     }
 }
 
@@ -146,8 +146,17 @@ export class TableSection extends Section<SectionTypes.table> {
         return false;
     }
 
-    public override contentEncode(encoder: IEncoder): void {
+    public override contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         if (!this.Tables.length) { return; }
+        if (!opts.multipleTables) {
+            let tabs = this.Tables;
+            tabs.push(
+                ...mod.ImportSection.Imports
+                    .map(i => i.isTable() ? i.Description : null!)
+                    .filter(x => !!x)    
+            );
+            if (tabs.length > 1) { throw new Error('Multiple table declaration detected'); }
+        }
         encoder.vector(this.Tables);
     }
 
@@ -165,7 +174,7 @@ export class MemorySection extends Section<SectionTypes.memory> {
         protect(this, 'Memories', [], true);
     }
 
-    public import(memory: Types.MemoryType): boolean {
+    public add(memory: Types.MemoryType): boolean {
         if (this.Memories.indexOf(memory) == -1) {
             this.Memories.unshift(memory);
             return true;
@@ -173,8 +182,21 @@ export class MemorySection extends Section<SectionTypes.memory> {
         return false;
     }
 
-    public override contentEncode(encoder: IEncoder): void {
+    public import(memory: Types.MemoryType): boolean {
+        return this.add(memory);
+    }
+
+    public override contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         if (!this.Memories.length) { return; }
+        if (!opts.multipleMemory) {
+            let mem = this.Memories;
+            mem.push(
+                ...mod.ImportSection.Imports
+                    .map(i => i.isMemory() ? i.Description : null!)
+                    .filter(x => !!x)
+            );
+            if (mem.length > 1) { throw new Error('Multiple memory declaration detected'); }
+        }
         encoder.vector(this.Memories);
     }
 
@@ -205,15 +227,15 @@ export class GlobalVariable implements IEncodable<Module> {
         return this.isReference && (other instanceof GlobalVariable ? other.Reference : other) === other;
     }
 
-    public encode(encoder: IEncoder, context: Module) {
-        encoder.encode(this.Variable).encode(this.Initialization, context);
+    public encode(encoder: IEncoder, mod: Module) {
+        encoder.encode(this.Variable).encode(this.Initialization, mod);
     }
     
-    public static decode(decoder: IDecoder, context: Module): GlobalVariable {
+    public static decode(decoder: IDecoder, mod: Module): GlobalVariable {
         let type = decoder.decode(Types.GlobalType);
         return new GlobalVariable(
             type.Type,
-            decoder.decode(Expression, context),
+            decoder.decode(Expression, mod),
             type.Constant
         );
     }
@@ -253,15 +275,15 @@ export class GlobalSection extends Section<SectionTypes.global> {
         return false;
     }
 
-    public override contentEncode(encoder: IEncoder, context: Module): void {
+    public override contentEncode(encoder: IEncoder, mod: Module): void {
         if (!this.Globals.length) { return; }
-        encoder.vector(this.Globals, context);
+        encoder.vector(this.Globals, mod);
     }
 
 
-    public override decode(decoder: IDecoder, context: Module) {
+    public override decode(decoder: IDecoder, mod: Module) {
         this.Globals.length = 0;
-        this.Globals.push(...decoder.vector(GlobalVariable, context));
+        this.Globals.push(...decoder.vector(GlobalVariable, mod));
     }
 }
 
@@ -274,24 +296,24 @@ export class StartSection extends Section<SectionTypes.start> {
         this.Target = null;
     }
 
-    public getStartIndex(context: Module, pass?: boolean): number {
+    public getStartIndex(mod: Module, pass?: boolean): number {
         if (!pass && !this.Target) { throw new Error('Invalid starting function index'); }
         if (!this.Target) { return -1; }
-        let index = context.TypeSection.indexOf(this.Target);
+        let index = mod.TypeSection.indexOf(this.Target);
         if (!pass && index < 0) { throw new Error('Invalid starting function index'); }
         return index;
     }
 
-    public override contentEncode(encoder: IEncoder, context: Module): void {
+    public override contentEncode(encoder: IEncoder, mod: Module): void {
         if (!this.Target) { return; }
-        encoder.uint32(this.getStartIndex(context));
+        encoder.uint32(this.getStartIndex(mod));
     }
-    public override decode(decoder: IDecoder, context: Module) {
+    public override decode(decoder: IDecoder, mod: Module) {
         let index = decoder.uint32();
-        if (!context.TypeSection.Types[index]) {
+        if (!mod.TypeSection.Types[index]) {
             throw new Error('Start Section invalid function reference');
         }
-        this.Target = context.TypeSection.Types[index]!;
+        this.Target = mod.TypeSection.Types[index]!;
     }
 }
 
@@ -304,7 +326,7 @@ export enum ExchangeDescriptionCode {
     global  = 0x03
 }
 export type ImportDescription = Types.FunctionType | Types.TableType | Types.MemoryType | Types.GlobalType;
-export class ImportSegment implements IEncodable<Types.FunctionType[]> {
+export class ImportSegment implements IEncodable<[Types.FunctionType[]]> {
     public Module: string;
     public Name: string;
     public Description: ImportDescription;
@@ -372,18 +394,18 @@ export class ImportSegment implements IEncodable<Types.FunctionType[]> {
         }
     }
 
-    public static decode(decoder: IDecoder, context: Module): ImportSegment {
-        let mod = decoder.vector('utf8'),
+    public static decode(decoder: IDecoder, mod: Module): ImportSegment {
+        let ns = decoder.vector('utf8'),
             name = decoder.vector('utf8'),
             type = decoder.uint8(),
             desc;
         switch (type) {
             case ExchangeDescriptionCode.function: {
                 let index = decoder.uint32();
-                if (!context.TypeSection.Types[index]) {
+                if (!mod.TypeSection.Types[index]) {
                     throw new Error('Invalid Import Segment function reference');
                 }
-                desc = context.TypeSection.Types[index]!;
+                desc = mod.TypeSection.Types[index]!;
                 break;
             }
             case ExchangeDescriptionCode.global:
@@ -397,7 +419,7 @@ export class ImportSegment implements IEncodable<Types.FunctionType[]> {
                 break;
             default: throw new Error('Invalid Import Segment type: ' + type);
         }
-        return new ImportSegment(mod, name, desc)
+        return new ImportSegment(ns, name, desc)
     }
 }
 
@@ -414,12 +436,12 @@ export class ImportSection extends Section<SectionTypes.import> {
         return this.Imports.findIndex(i => i.isFunction() && i.Description.equals(target))
     }
 
-    protected contentEncode(encoder: IEncoder, context: Module): void {
+    protected contentEncode(encoder: IEncoder, mod: Module): void {
         if (!this.Imports.length) { return; }
-        if (this.Imports.filter(i => i.isFunction()).some(i => context.TypeSection.indexOf(i.Description as Types.FunctionType) < 0 || i.code < 0)) {
+        if (this.Imports.filter(i => i.isFunction()).some(i => mod.TypeSection.indexOf(i.Description as Types.FunctionType) < 0 || i.code < 0)) {
             throw new Error('Invalid function definition index');
         }
-        encoder.vector(this.Imports, context.TypeSection.Types);
+        encoder.vector(this.Imports, mod.TypeSection.Types);
     }
 
     public add(segment: ImportSegment, context?: Module): boolean {
@@ -440,9 +462,9 @@ export class ImportSection extends Section<SectionTypes.import> {
         return true;
     }
 
-    public override decode(decoder: IDecoder, context: Module) {
+    public override decode(decoder: IDecoder, mod: Module) {
         this.Imports.length = 0;
-        this.Imports.push(...decoder.vector(ImportSegment, context));
+        this.Imports.push(...decoder.vector(ImportSegment, mod));
     }
 
 }
@@ -477,45 +499,45 @@ export class ExportSegment implements IEncodable<Module> {
         this.Description = description;
     }
     
-    public getIndex(context: Module, pass?: boolean): number {
+    public getIndex(mod: Module, pass?: boolean): number {
         let target;
-        if (this.isFunction()) { target = context.TypeSection; }
-        else if (this.isGlobal()) { target = context.GlobalSection.Globals; }
-        else if (this.isMemory()) { target = context.MemorySection.Memories; }
-        else if (this.isTable()) { target = context.TableSection.Tables; }
+        if (this.isFunction()) { target = mod.TypeSection; }
+        else if (this.isGlobal()) { target = mod.GlobalSection.Globals; }
+        else if (this.isMemory()) { target = mod.MemorySection.Memories; }
+        else if (this.isTable()) { target = mod.TableSection.Tables; }
         else { throw new Error('Invalid Description type'); }
         let index = target.indexOf(this.Description as any);
         if (!pass && index < 0) { throw new Error('Invalid function definition index!') }
         return index;
     }
 
-    public encode(encoder: IEncoder, context: Module) {
+    public encode(encoder: IEncoder, mod: Module) {
         let code = this.code;
         if (code < 0) { throw new Error('Invalid export description!'); }
-        let index = this.getIndex(context);
+        let index = this.getIndex(mod);
         encoder
             .vector(this.Name)
             .uint8(code)
             .uint32(index);
     }
 
-    public static decode(decoder: IDecoder, context: Module): ExportSegment {
+    public static decode(decoder: IDecoder, mod: Module): ExportSegment {
         let name = decoder.vector('utf8'),
             code = decoder.uint8(),
             index = decoder.uint32(),
             target;
         switch (code) {
             case ExchangeDescriptionCode.function:
-                target = context.TypeSection.Types;
+                target = mod.TypeSection.Types;
                 break;
             case ExchangeDescriptionCode.global:
-                target = context.GlobalSection.Globals.map(g => g.Variable);
+                target = mod.GlobalSection.Globals.map(g => g.Variable);
                 break;
             case ExchangeDescriptionCode.memory:
-                target = context.MemorySection.Memories;
+                target = mod.MemorySection.Memories;
                 break;
             case ExchangeDescriptionCode.table:
-                target = context.TableSection.Tables;
+                target = mod.TableSection.Tables;
                 break;
             default: throw new Error('Export Segment invalid description code');
         }
@@ -541,17 +563,17 @@ export class ExportSection extends Section<SectionTypes.export> {
         return true;
     }
 
-    protected contentEncode(encoder: IEncoder, context: Module) {
+    protected contentEncode(encoder: IEncoder, mod: Module) {
         if (!this.Exports.length) { return; }
-        if (this.Exports.some(i => i.getIndex(context) < 0)) {
+        if (this.Exports.some(i => i.getIndex(mod) < 0)) {
             throw new Error('Invalid function definition index');
         }
-        encoder.vector(this.Exports, context);
+        encoder.vector(this.Exports, mod);
     }
 
-    public override decode(decoder: IDecoder, context: Module) {
+    public override decode(decoder: IDecoder, mod: Module) {
         this.Exports.length = 0;
-        this.Exports.push(...decoder.vector(ExportSegment, context));
+        this.Exports.push(...decoder.vector(ExportSegment, mod));
     }
 
 }
@@ -612,21 +634,21 @@ export class ElementSegment implements IEncodable<Module> {
     public get usesElementKind(): boolean { return !this.usesElementType; }
     public get usesElementType(): boolean { return !!(this.Type & 0x04); }
 
-    public getFunctionIndices(context: Module, pass?: boolean): number[] {
-        let idxs = this.Functions.map(f => context.FunctionSection.indexOf(f));
+    public getFunctionIndices(mod: Module, pass?: boolean): number[] {
+        let idxs = this.Functions.map(f => mod.FunctionSection.indexOf(f));
         let wrong;
         if (!pass && idxs.some(i => (wrong = i, i < 0))) { throw new Error('Invalid function definition index (at: ' + wrong + ')') }
         return idxs;
     }
-    public getTableIndex(context: Module, pass?: boolean): number {
+    public getTableIndex(mod: Module, pass?: boolean): number {
         if (!pass && !this.Table) { throw new Error('Invalid ElementSegment Table reference'); }
         if (!this.Table) { return -1; }
-        let idx = context.TableSection.Tables.indexOf(this.Table);
+        let idx = mod.TableSection.Tables.indexOf(this.Table);
         if (!pass && idx < 0) { throw new Error('Invalid ElementSegment Table reference'); }
         return idx;
     }
 
-    public encode(encoder: IEncoder, context: Module): void {
+    public encode(encoder: IEncoder, mod: Module): void {
         if (this.Type > ElementTypes.Max || this.Type < 0) {
             throw new Error('Invalid Element Segment type [0x00, 0x07]: ' + this.Type);
         }
@@ -635,69 +657,69 @@ export class ElementSegment implements IEncodable<Module> {
         switch (this.Type) {
             case ElementTypes.ActiveKind:
                 if (!this.Expression || !this.Functions.length) { throw new Error('Invalid ElementSegment[ActiveKind]'); }
-                idxs = this.getFunctionIndices(context);
+                idxs = this.getFunctionIndices(mod);
                 encoder
-                    .encode(this.Expression, context)
+                    .encode(this.Expression, mod)
                     .vector(idxs, 'uint32');
                 break;
             case ElementTypes.DeclarativeKind:
                 if (this.Kind === null || !this.Functions.length) { throw new Error('Invalid ElementSegment[DeclarativeKind]'); }
-                idxs = this.getFunctionIndices(context);
+                idxs = this.getFunctionIndices(mod);
                 encoder
                     .uint8(this.Kind)
                     .vector(idxs, 'uint32');
                 break;
             case ElementTypes.ActiveKindTable:
                 if (!this.Expression || !this.Table || this.Kind === null || !this.Functions.length) { throw new Error('Invalid ElementSegment[ActiveKindTable]'); }
-                tid = this.getTableIndex(context)
-                idxs = this.getFunctionIndices(context);
+                tid = this.getTableIndex(mod)
+                idxs = this.getFunctionIndices(mod);
                 encoder
                     .uint32(tid)
-                    .encode(this.Expression, context)
+                    .encode(this.Expression, mod)
                     .uint8(this.Kind)
                     .vector(idxs, 'uint32')
                 ;
                 break;
             case ElementTypes.PassiveKind:
                 if (this.Kind === null || !this.Functions.length) { throw new Error('Invalid ElementSegment[PassiveKind]'); }
-                idxs = this.getFunctionIndices(context);
+                idxs = this.getFunctionIndices(mod);
                 encoder.uint8(this.Kind).vector(idxs, 'uint32');
                 break;
             case ElementTypes.ActiveType:
                 if (!this.Expression || !this.Initialization.length) { throw new Error('Invalid ElementSegment[ActiveType]'); }
-                encoder.encode(this.Expression, context).vector(this.Initialization, context);
+                encoder.encode(this.Expression, mod).vector(this.Initialization, mod);
                 break;
             case ElementTypes.DeclarativeType:
                 if (!this.Reference || !this.Initialization.length) { throw new Error('Invalid ElementSegment[DeclarativeType]'); }
-                encoder.uint8(this.Reference).vector(this.Initialization, context);
+                encoder.uint8(this.Reference).vector(this.Initialization, mod);
                 break;
             case ElementTypes.ActiveTypeTable:
                 if (!this.Table || !this.Expression || !this.Reference || !this.Initialization.length) { throw new Error('Invalid ElementSegment[ActiveTypeTable]'); }
-                tid = this.getTableIndex(context);
+                tid = this.getTableIndex(mod);
                 encoder
                     .uint32(tid)
-                    .encode(this.Expression, context)
+                    .encode(this.Expression, mod)
                     .uint8(this.Reference)
-                    .vector(this.Initialization, context)
+                    .vector(this.Initialization, mod)
                 ;
                 break;
             case ElementTypes.PassiveType:
                 if (!this.Reference || !this.Initialization.length) { throw new Error('Invalid ElementSegment[PassiveType]'); }
-                encoder.uint8(this.Reference).vector(this.Initialization, context);
+                encoder.uint8(this.Reference).vector(this.Initialization, mod);
                 break;
             default: throw new Error('Invalid ElementSegment Type: ' + this.Type)
         }
     }
 
-    public static decode(decoder: IDecoder, context: Module): ElementSegment {
+    public static decode(decoder: IDecoder, mod: Module): ElementSegment {
         let type = decoder.uint8();
         let idxs, tid;
         let segment = new ElementSegment();
         switch (type) {
             case ElementTypes.ActiveKind:
-                segment.Expression = decoder.decode(Expression, context);
+                segment.Expression = decoder.decode(Expression, mod);
                 idxs = decoder.vector('uint32');
-                segment.Functions.push(...idxs.map(id => context.FunctionSection.Functions[id]!));
+                segment.Functions.push(...idxs.map(id => mod.FunctionSection.Functions[id]!));
                 if (segment.Functions.some(f => !f)) {
                     throw new Error('Invalid Element Segment function reference');
                 }
@@ -705,21 +727,21 @@ export class ElementSegment implements IEncodable<Module> {
             case ElementTypes.DeclarativeKind:
                 segment.Kind = decoder.uint8();
                 idxs = decoder.vector('uint32');
-                segment.Functions.push(...idxs.map(id => context.FunctionSection.Functions[id]!));
+                segment.Functions.push(...idxs.map(id => mod.FunctionSection.Functions[id]!));
                 if (segment.Functions.some(f => !f)) {
                     throw new Error('Invalid Element Segment function reference');
                 }
                 break;
             case ElementTypes.ActiveKindTable:
                 tid = decoder.uint32();
-                segment.Expression = decoder.decode(Expression, context);
+                segment.Expression = decoder.decode(Expression, mod);
                 segment.Kind = decoder.uint8();
                 idxs = decoder.vector('uint32');
-                if (!context.TableSection.Tables[tid]) {
+                if (!mod.TableSection.Tables[tid]) {
                     throw new Error('Invalid Element Segment table reference');
                 }
-                segment.Table = context.TableSection.Tables[tid]!;
-                segment.Functions.push(...idxs.map(id => context.FunctionSection.Functions[id]!));
+                segment.Table = mod.TableSection.Tables[tid]!;
+                segment.Functions.push(...idxs.map(id => mod.FunctionSection.Functions[id]!));
                 if (segment.Functions.some(f => !f)) {
                     throw new Error('Invalid Element Segment function reference');
                 }
@@ -727,32 +749,32 @@ export class ElementSegment implements IEncodable<Module> {
             case ElementTypes.PassiveKind:
                 segment.Kind = decoder.uint8();
                 idxs = decoder.vector('uint32');
-                segment.Functions.push(...idxs.map(id => context.FunctionSection.Functions[id]!));
+                segment.Functions.push(...idxs.map(id => mod.FunctionSection.Functions[id]!));
                 if (segment.Functions.some(f => !f)) {
                     throw new Error('Invalid Element Segment function reference');
                 }
                 break;
             case ElementTypes.ActiveType:
-                segment.Expression = decoder.decode(Expression, context);
-                segment.Initialization.push(...decoder.vector(Expression, context));
+                segment.Expression = decoder.decode(Expression, mod);
+                segment.Initialization.push(...decoder.vector(Expression, mod));
                 break;
             case ElementTypes.DeclarativeType:
                 segment.Reference = decoder.uint8();
-                segment.Initialization.push(...decoder.vector(Expression, context));
+                segment.Initialization.push(...decoder.vector(Expression, mod));
                 break;
             case ElementTypes.ActiveTypeTable:
                 tid = decoder.uint32();
-                if (!context.TableSection.Tables[tid]) {
+                if (!mod.TableSection.Tables[tid]) {
                     throw new Error('Invalid Element Segment table reference');
                 }
-                segment.Table = context.TableSection.Tables[tid]!;
-                segment.Expression = decoder.decode(Expression, context);
+                segment.Table = mod.TableSection.Tables[tid]!;
+                segment.Expression = decoder.decode(Expression, mod);
                 segment.Reference = decoder.uint8();
-                segment.Initialization.push(...decoder.vector(Expression, context));
+                segment.Initialization.push(...decoder.vector(Expression, mod));
                 break;
             case ElementTypes.PassiveType:
                 segment.Reference = decoder.uint8();
-                segment.Initialization.push(...decoder.vector(Expression, context));
+                segment.Initialization.push(...decoder.vector(Expression, mod));
                 break;
             default: throw new Error('Invalid ElementSegment Type: ' + type)
         }
@@ -769,14 +791,14 @@ export class ElementSection extends Section<SectionTypes.element> {
         protect(this, 'Elements', [], true);
     }
 
-    public override contentEncode(encoder: IEncoder, context: Module): void {
+    public override contentEncode(encoder: IEncoder, mod: Module): void {
         if (!this.Elements.length) { return; }
-        encoder.vector(this.Elements, context);
+        encoder.vector(this.Elements, mod);
     }
 
-    public decode(decoder: IDecoder, context: Module): void {
+    public decode(decoder: IDecoder, mod: Module): void {
         this.Elements.length = 0;
-        this.Elements.push(...decoder.vector(ElementSegment, context));
+        this.Elements.push(...decoder.vector(ElementSegment, mod));
     }
 }
 
@@ -802,15 +824,15 @@ export class DataSegment implements IEncodable<Module> {
         protect(this, 'Bytes', [], true);
     }
 
-    public getMemoryIndex(context: Module, pass?: boolean): number {
+    public getMemoryIndex(mod: Module, pass?: boolean): number {
         if (!pass && !this.Memory) { throw new Error('Invalid DataSegment Memory reference'); }
         if (!this.Memory) { return -1; }
-        let idx = context.MemorySection.Memories.indexOf(this.Memory);
+        let idx = mod.MemorySection.Memories.indexOf(this.Memory);
         if (!pass && idx < 0) { throw new Error('Invalid DataSegment Memory reference'); }
         return idx;
     }
 
-    public encode(encoder: IEncoder, context: Module): void {
+    public encode(encoder: IEncoder, mod: Module): void {
         if (this.Kind < 0 || this.Kind > DataSegmentKind.activeExplicit) {
             throw new Error('Invalid DataSegment kind: ' + this.Kind);
         }
@@ -820,34 +842,34 @@ export class DataSegment implements IEncodable<Module> {
         switch (this.Kind) {
             case DataSegmentKind.active:
                 if (!this.Expression) { throw new Error('Invalid DataSegment[Active]'); }
-                encoder.encode(this.Expression, context);
+                encoder.encode(this.Expression, mod);
                 break;
             case DataSegmentKind.passive: break;
             case DataSegmentKind.activeExplicit:
                 if (!this.Memory || !this.Expression) { throw new Error('Invalid DataSegment[ActiveExplicit]'); }
-                idx = this.getMemoryIndex(context)
-                encoder.uint32(idx).encode(this.Expression, context);
+                idx = this.getMemoryIndex(mod)
+                encoder.uint32(idx).encode(this.Expression, mod);
                 break;
             default: throw new Error('Invalid DataSegment kind: ' + this.Kind);
         }
         encoder.append(this.Bytes);
     }
 
-    public static decode(decoder: IDecoder, context: Module): DataSegment {
+    public static decode(decoder: IDecoder, mod: Module): DataSegment {
         let kind = decoder.uint8();
         let segment = new DataSegment(kind);
         switch (kind) {
             case DataSegmentKind.active:
-                segment.Expression = decoder.decode(Expression, context);
+                segment.Expression = decoder.decode(Expression, mod);
                 break;
             case DataSegmentKind.passive: break;
             case DataSegmentKind.activeExplicit: {
                 let idx = decoder.uint32();
-                if (!context.MemorySection.Memories[idx]) {
+                if (!mod.MemorySection.Memories[idx]) {
                     throw new Error('Invalid Data Segment memory reference');
                 }
-                segment.Memory = context.MemorySection.Memories[idx]!;
-                segment.Expression = decoder.decode(Expression, context);
+                segment.Memory = mod.MemorySection.Memories[idx]!;
+                segment.Expression = decoder.decode(Expression, mod);
                 break;
             }
             default: throw new Error('Invalid DataSegment kind: ' + kind);
@@ -866,14 +888,22 @@ export class DataSection extends Section<SectionTypes.data> {
         protect(this, 'Datas', [], true);
     }
 
-    protected contentEncode(encoder: IEncoder, context: Module): void {
-        if (!this.Datas.length) { return; }
-        encoder.vector(this.Datas, context);
+    public add(segment: DataSegment): boolean { 
+        if (this.Datas.indexOf(segment) === -1) {
+            this.Datas.push(segment);
+            return true;
+        }
+        return false;
     }
 
-    public decode(decoder: IDecoder, context: Module): void {
+    protected contentEncode(encoder: IEncoder, mod: Module): void {
+        if (!this.Datas.length) { return; }
+        encoder.vector(this.Datas, mod);
+    }
+
+    public decode(decoder: IDecoder, mod: Module): void {
         this.Datas.length = 0;
-        this.Datas.push(...decoder.vector(DataSegment, context));
+        this.Datas.push(...decoder.vector(DataSegment, mod));
     }
 }
 
@@ -881,9 +911,9 @@ export class DataCountSection extends Section<SectionTypes.dataCount> {
 
     public constructor() { super(SectionTypes.dataCount); }
 
-    protected contentEncode(encoder: IEncoder, context: Module): void {
-        if (!context.DataSection.Datas.length) { return; }
-        encoder.uint32(context.DataSection.Datas.length);
+    protected contentEncode(encoder: IEncoder, mod: Module): void {
+        if (!mod.DataSection.Datas.length) { return; }
+        encoder.uint32(mod.DataSection.Datas.length);
     }
     public override decode(): void { }
 }
@@ -900,12 +930,12 @@ export class CodeSegment implements IEncodable<Module> {
         protect(this, 'Locals', locals.slice(), true);
     }
 
-    public encode(encoder: IEncoder, context: Module): void {
+    public encode(encoder: IEncoder, mod: Module): void {
         let e = encoder.spawn();
         let l = this.Locals.reduce((a, c) => (a[c] = (a[c] || 0) + 1, a), { } as { [key: number]: number });
         e.uint32(Object.keys(l).length);
         for (let k in l) { e.uint32(l[k]!).uint8(parseInt(k)); }
-        e.encode(this.Body, context);
+        e.encode(this.Body, mod);
         encoder.uint32(e.size).append(e);
     }
 
@@ -951,17 +981,17 @@ export class CodeSection extends Section<SectionTypes.code> {
         return true;
     }
     
-    public contentEncode(encoder: IEncoder, context: Module): void {
+    public contentEncode(encoder: IEncoder, mod: Module): void {
         if (
-            this.Codes.length != context.FunctionSection.Functions.length ||
-            this.Codes.some((cs, i) => !cs.Signature.equals(context.FunctionSection.Functions[i]))
+            this.Codes.length != mod.FunctionSection.Functions.length ||
+            this.Codes.some((cs, i) => !cs.Signature.equals(mod.FunctionSection.Functions[i]))
         ) { throw new Error('Code Section does not correspond to Function Section!'); }
-        encoder.vector(this.Codes, context);
+        encoder.vector(this.Codes, mod);
     }
 
-    public decode(decoder: IDecoder, context: Module): void {
+    public decode(decoder: IDecoder, mod: Module): void {
         this.Codes.length = 0;
-        this.Codes.push(...decoder.vector(CodeSegment, { index: 0, module: context }))
+        this.Codes.push(...decoder.vector(CodeSegment, { index: 0, module: mod }))
     }
 }
 
@@ -1022,6 +1052,110 @@ export abstract class CustomSection extends Section<SectionTypes.custom> {
         CustomSection._customTypes[(''+ name).toLowerCase()] = (type || this) as any;
     }
 }
+
+export class NameReference implements IEncodable {
+    public Index: number;
+    public Name: string;
+    public constructor(index: number, name: string) {
+        this.Index = index;
+        this.Name = name;
+    }
+    public encode(encoder: IEncoder): any {
+        encoder.uint32(this.Index);
+        encoder.string(this.Name);
+    }
+    public static decode(decoder: IDecoder): NameReference {
+        return new NameReference(
+            decoder.uint32(),
+            decoder.vector('utf8')
+        );
+    }
+    
+}
+
+export enum NameSubSections {
+    module    = 0x00,
+    function  = 0x01,
+    local     = 0x02
+}
+export class NameCustomSection extends CustomSection {
+    public Module: string | null;
+    public readonly Functions!: NameReference[];
+    public readonly Locals!: { [key: number]: NameReference[] };
+    public constructor() {
+        super('name', false);
+        this.Module = null;
+        protect(this, 'Functions', []);
+        protect(this, 'Locals', {});
+    }
+
+    public module(name: string): this {
+        this.Module = name;
+        return this;
+    }
+    public function(value: NameReference): boolean {
+        let rv = this.Functions.find(m => m.Index === value.Index);
+        if (rv) { return false; }
+        this.Functions.push(value);
+        return true;
+    }
+    public local(fnIndex: number, value: NameReference): boolean {
+        if (!this.Locals[fnIndex]) { this.Locals[fnIndex] = []; }
+        let rv = this.Locals[fnIndex]!.find(m => m.Index === value.Index);
+        if (rv) { return false; }
+        this.Locals[fnIndex]!.push(value);
+        return true;
+    }
+    protected override encodeBytes(encoder: IEncoder): void {
+        if (this.Module !== null) {
+            const e = encoder.spawn();
+            e.string(this.Module);
+            encoder.uint8(NameSubSections.module).uint32(e.size).append(e);
+        }
+        if (this.Functions.length) {
+            const e = encoder.spawn();
+            e.vector(this.Functions);
+            encoder.uint8(NameSubSections.function).uint32(e.size).append(e);
+        }
+        const locFns = Object.keys(this.Locals);
+        if (locFns.length) {
+            const e = encoder.spawn();
+            e.uint32(locFns.length);
+            for (let k in this.Locals) {
+                e.uint32(parseInt(k)).vector(this.Locals[k]!);
+            }
+            encoder.uint8(NameSubSections.local).uint32(e.size).append(e);
+        }
+    }
+    protected override decodeBytes(decoder: IDecoder): void {
+        this.Module = null;
+        this.Functions.length = 0;
+        for (const k in this.Locals) { delete this.Locals[k]; }
+
+        while (decoder.remaining) {
+            const type = decoder.uint8();
+            const size = decoder.uint32();
+            const d = decoder.slice(size);
+            switch (type) {
+                case NameSubSections.module:
+                    this.Module = d.vector('utf8'); break;
+                case NameSubSections.function:
+                    this.Functions.push(...d.vector(NameReference)); break;
+                case NameSubSections.local: {
+                    const n = d.uint32();
+                    for (let i = 0; i < n; ++i) {
+                        const k = d.uint32();
+                        this.Locals[k] = this.Locals[k] || [];
+                        this.Locals[k]!.push(...d.vector(NameReference));
+                    }
+                    break;
+                }
+                default: throw new Error('Unrecognized subsection');
+            }
+        }
+    }
+}
+NameCustomSection.registerCustomType('name');
 
 export class UnkownCustomSection extends CustomSection {
     public override Name!: string;
