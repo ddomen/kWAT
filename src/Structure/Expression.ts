@@ -1,5 +1,5 @@
 import { protect } from '../internal';
-import { OpCodes, ForwardOpCodes } from '../OpCodes';
+import { OpCodes, OpCodesExt1, OpCodesExt2 } from '../OpCodes';
 import * as Types from './Types';
 import * as Sections from './Sections';
 import type { IEncodable, IDecodable, IDecoder, IEncoder } from './Encoder';
@@ -57,10 +57,12 @@ export class Expression implements IEncodable<Module> {
 }
 
 export type Passable<T extends boolean | undefined, R> = R | (T extends false | undefined ? never : null);
-export type ForwardInstruction<O extends ForwardOpCodes=ForwardOpCodes> = Instruction<OpCodes.look_forward> & { OperationCode: O };
+export type Ext1Instruction<O extends OpCodesExt1=OpCodesExt1> = Instruction<OpCodes.op_extension_1> & { OperationCode: O };
+export type Ext2Instruction<O extends OpCodesExt2=OpCodesExt2> = Instruction<OpCodes.op_extension_2> & { OperationCode: O };
 
 type Instructible<O extends OpCodes=OpCodes> = { instance: Instruction<O> } | IDecodable<Instruction<O>, [ ExpressionContext ]>;
-type ForwardInstructible<O extends ForwardOpCodes=ForwardOpCodes> = { instance: ForwardInstruction<O> } | IDecodable<ForwardInstruction<O>, [ ExpressionContext ]>;
+type Ext1Instructible<O extends OpCodesExt1=OpCodesExt1> = { instance: Ext1Instruction<O> } | IDecodable<Ext1Instruction<O>, [ ExpressionContext ]>;
+type Ext2Instructible<O extends OpCodesExt2=OpCodesExt2> = { instance: Ext2Instruction<O> } | IDecodable<Ext2Instruction<O>, [ ExpressionContext ]>;
 type ExpressionContext = { module: Module, blocks: AbstractBlockInstruction[] };
 type Ctor<I extends Instruction, Args extends any[]=[]> = { new(...args: Args): I };
 type StackEdit = [ (Types.ValueType | null)[], (Types.ValueType | { ref: number })[] ];
@@ -112,22 +114,29 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
     }
 
     private static readonly _instructionSet: { [key in OpCodes]?: Instructible } = { };
-    private static readonly _forwardSet: { [key in ForwardOpCodes]?: ForwardInstructible } = { };
+    private static readonly _ext1Set: { [key in OpCodesExt1]?: Ext1Instructible } = { };
+    private static readonly _ext2Set: { [key in OpCodesExt2]?: Ext2Instructible } = { };
 
-    public static registerInstruction<O extends Exclude<OpCodes, OpCodes.look_forward>>(this: Instructible<O>, key: O): void;
-    public static registerInstruction<O extends ForwardOpCodes>(this: ForwardInstructible<O>, key: OpCodes.look_forward, forward: O): void;
-    public static registerInstruction(this: Instructible | ForwardInstructible, key: OpCodes, forward?: ForwardOpCodes): void {
-        if (key === OpCodes.look_forward) {
-            if (!((typeof(forward) === 'undefined' ? -1 : forward) in ForwardOpCodes)) { throw new Error('Invalid forward code 0x' + Number(forward).toString(16)); }
-            Instruction._forwardSet[forward!] = this as ForwardInstructible;
+    public static registerInstruction<O extends Exclude<OpCodes, OpCodes.op_extension_1>>(this: Instructible<O>, key: O): void;
+    public static registerInstruction<O extends OpCodesExt1>(this: Ext1Instructible<O>, key: OpCodes.op_extension_1, forward: O): void;
+    public static registerInstruction<O extends OpCodesExt2>(this: Ext2Instructible<O>, key: OpCodes.op_extension_2, forward: O): void;
+    public static registerInstruction(this: Instructible | Ext1Instructible, key: OpCodes, forward?: OpCodesExt1): void {
+        if (key === OpCodes.op_extension_1) {
+            if (!((typeof(forward) === 'undefined' ? -1 : forward) in OpCodesExt1)) { throw new Error('Invalid forward code 0x' + Number(forward).toString(16)); }
+            Instruction._ext1Set[forward!] = this as Ext1Instructible;
+        }
+        else if (key === OpCodes.op_extension_2) {
+            if (!((typeof(forward) === 'undefined' ? -1 : forward) in OpCodesExt2)) { throw new Error('Invalid forward code 0x' + Number(forward).toString(16)); }
+            Instruction._ext2Set[forward!] = this as Ext2Instructible;
         }
         else if (!(key in OpCodes)) { throw new Error('Invalid opcode 0x' + Number(key).toString(16)); }
         else { Instruction._instructionSet[key] = this as Instructible; }
     }
     public static decode(decoder: IDecoder, context: ExpressionContext): Instruction {
-        let code: OpCodes = decoder.uint8(), fwd: ForwardOpCodes = -1, ctor;
-        if (code === OpCodes.look_forward) { ctor = Instruction._forwardSet[(fwd = decoder.uint32() as ForwardOpCodes)]; }
-        ctor = Instruction._instructionSet[code];
+        let code: OpCodes = decoder.uint8(), fwd: OpCodesExt1 | OpCodesExt2 = -1, ctor;
+        if (code === OpCodes.op_extension_1) { ctor = Instruction._ext1Set[(fwd = decoder.uint32() as OpCodesExt1)]; }
+        else if (code === OpCodes.op_extension_2) { ctor = Instruction._ext2Set[(fwd = decoder.uint32() as OpCodesExt2)]; }
+        else { ctor = Instruction._instructionSet[code]; }
         if (!ctor) { throw new Error('Unsupported Instruction code: 0x' + Number(code).toString(16) + (fwd >= 0 ? ' 0x' + Number(fwd).toString(16) : '')); }
         if ('instance' in ctor && ctor.instance instanceof Instruction) { return ctor.instance; }
         else if ('decode' in ctor && typeof(ctor.decode) === 'function') { return ctor.decode(decoder, context); }
@@ -636,7 +645,7 @@ export class GlobalSetInstruction extends GlobalVariableInstruction<OpCodes.glob
 }
 GlobalSetInstruction.registerInstruction(OpCodes.global_set);
 
-export type TableInstructionCodes = OpCodes.table_get | OpCodes.table_set | OpCodes.look_forward;
+export type TableInstructionCodes = OpCodes.table_get | OpCodes.table_set | OpCodes.op_extension_1;
 export abstract class AbstractTableInstruction<O extends TableInstructionCodes> extends Instruction<O> { }
 
 export class TableGetInstruction extends AbstractTableInstruction<OpCodes.table_get> {
@@ -652,13 +661,13 @@ export class TableSetInstruction extends AbstractTableInstruction<OpCodes.table_
 }
 TableSetInstruction.registerInstruction(OpCodes.table_set);
 
-export type TableInstructionForwardCodes = ForwardOpCodes.table_copy | ForwardOpCodes.table_fill | ForwardOpCodes.table_grow |
-                                            ForwardOpCodes.table_init | ForwardOpCodes.table_size | ForwardOpCodes.elem_drop;
-export abstract class TableInstruction<O extends TableInstructionForwardCodes=TableInstructionForwardCodes> extends AbstractTableInstruction<OpCodes.look_forward> {
+export type TableInstructionForwardCodes = OpCodesExt1.table_copy | OpCodesExt1.table_fill | OpCodesExt1.table_grow |
+                                            OpCodesExt1.table_init | OpCodesExt1.table_size | OpCodesExt1.elem_drop;
+export abstract class TableInstruction<O extends TableInstructionForwardCodes=TableInstructionForwardCodes> extends AbstractTableInstruction<OpCodes.op_extension_1> {
     public readonly OperationCode!: O;
     public Table: Types.TableType;
     protected constructor(code: O, table: Types.TableType) {
-        super(OpCodes.look_forward);
+        super(OpCodes.op_extension_1);
         protect(this, 'OperationCode', code, true);
         this.Table = table;
     }
@@ -672,10 +681,10 @@ export abstract class TableInstruction<O extends TableInstructionForwardCodes=Ta
         encoder.uint32(this.OperationCode);
     }
 }
-export class TableInitInstruction extends TableInstruction<ForwardOpCodes.table_init> {
+export class TableInitInstruction extends TableInstruction<OpCodesExt1.table_init> {
     public Element: Sections.ElementSegment;
     public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32, Types.Type.i32 ], [] ]; }
-    public constructor(table: Types.TableType, element: Sections.ElementSegment) { super(ForwardOpCodes.table_init, table); this.Element = element; }
+    public constructor(table: Types.TableType, element: Sections.ElementSegment) { super(OpCodesExt1.table_init, table); this.Element = element; }
     public getElementIndex(context: ExpressionContext, pass?: boolean): number {
         let index = context.module.ElementSection.Elements.indexOf(this.Element);
         if(!pass && index < 0) { throw new Error('Table Init Instruction invalid element reference'); }
@@ -698,11 +707,11 @@ export class TableInitInstruction extends TableInstruction<ForwardOpCodes.table_
         );
     }
 }
-TableInitInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.table_init);
-export class ElementDropInstruction extends TableInstruction<ForwardOpCodes.elem_drop> {
+TableInitInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.table_init);
+export class ElementDropInstruction extends TableInstruction<OpCodesExt1.elem_drop> {
     public Element: Sections.ElementSegment;
     public constructor(element: Sections.ElementSegment) {
-        super(ForwardOpCodes.elem_drop, null as any);
+        super(OpCodesExt1.elem_drop, null as any);
         this.Element = element;
     }
     public getElementIndex(context: ExpressionContext, pass?: boolean): number {
@@ -721,14 +730,14 @@ export class ElementDropInstruction extends TableInstruction<ForwardOpCodes.elem
         return new ElementDropInstruction(context.module.ElementSection.Elements[elem]!);
     }
 }
-ElementDropInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.elem_drop);
-export class TableCopyInstruction extends TableInstruction<ForwardOpCodes.table_copy> {
+ElementDropInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.elem_drop);
+export class TableCopyInstruction extends TableInstruction<OpCodesExt1.table_copy> {
     public Destination: Types.TableType;
     public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32, Types.Type.i32 ], [] ]; }
     public get Source(): Types.TableType { return this.Table; }
     public set Source(value: Types.TableType) { this.Table = value; }
     public constructor(table: Types.TableType, destination: Types.TableType) {
-        super(ForwardOpCodes.table_copy, table);
+        super(OpCodesExt1.table_copy, table);
         this.Destination = destination;
     }
     public getDestinationIndex(context: ExpressionContext, pass?: boolean): number {
@@ -753,8 +762,8 @@ export class TableCopyInstruction extends TableInstruction<ForwardOpCodes.table_
         );
     }
 }
-TableCopyInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.table_copy);
-export type TableOpInstructionCodes = ForwardOpCodes.table_grow | ForwardOpCodes.table_size | ForwardOpCodes.table_fill;
+TableCopyInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.table_copy);
+export type TableOpInstructionCodes = OpCodesExt1.table_grow | OpCodesExt1.table_size | OpCodesExt1.table_fill;
 export abstract class TableOpInstruction<O extends TableOpInstructionCodes=TableOpInstructionCodes> extends TableInstruction<O> {
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
         let index = this.getTableIndex(context);
@@ -771,22 +780,22 @@ export abstract class TableOpInstruction<O extends TableOpInstructionCodes=Table
         return new this(context.module.TableSection.Tables[index]!);
     }
 }
-export class TableGrowInstruction extends TableOpInstruction<ForwardOpCodes.table_grow> {
+export class TableGrowInstruction extends TableOpInstruction<OpCodesExt1.table_grow> {
     public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [ Types.Type.i32 ] ]; }
-    public constructor(table: Types.TableType) { super(ForwardOpCodes.table_grow, table); }
+    public constructor(table: Types.TableType) { super(OpCodesExt1.table_grow, table); }
 }
-TableGrowInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.table_grow);
-export class TableSizeInstruction extends TableOpInstruction<ForwardOpCodes.table_size> {
+TableGrowInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.table_grow);
+export class TableSizeInstruction extends TableOpInstruction<OpCodesExt1.table_size> {
     public override get stack(): StackEdit { return [ [], [ Types.Type.i32 ] ]; }
-    public constructor(table: Types.TableType) { super(ForwardOpCodes.table_size, table); }
+    public constructor(table: Types.TableType) { super(OpCodesExt1.table_size, table); }
 }
-TableSizeInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.table_size);
+TableSizeInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.table_size);
 
-export class TableFillInstruction extends TableOpInstruction<ForwardOpCodes.table_fill> {
+export class TableFillInstruction extends TableOpInstruction<OpCodesExt1.table_fill> {
     public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32 ], [ Types.Type.i32 ] ]; }
-    public constructor(table: Types.TableType) { super(ForwardOpCodes.table_fill, table); }
+    public constructor(table: Types.TableType) { super(OpCodesExt1.table_fill, table); }
 }
-TableFillInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.table_fill);
+TableFillInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.table_fill);
 
 
 export type MemoryInstructionCodes =
@@ -798,7 +807,7 @@ export type MemoryInstructionCodes =
                 OpCodes.f32_store | OpCodes.f64_store | OpCodes.i32_store8 |
                 OpCodes.i32_store16 | OpCodes.i64_store8 | OpCodes.i64_store16 |
                 OpCodes.i64_store32 | OpCodes.memory_size | OpCodes.memory_grow |
-                OpCodes.look_forward;
+                OpCodes.op_extension_1;
 
 export abstract class AbstractMemoryInstruction<O extends MemoryInstructionCodes> extends Instruction<O> { }
 
@@ -985,13 +994,13 @@ export class MemoryGrowInstruction extends AbstractMemoryInstruction<OpCodes.mem
 }
 MemoryGrowInstruction.registerInstruction(OpCodes.memory_grow);
 
-export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.look_forward> {
+export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.op_extension_1> {
     public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32, Types.Type.i32 ], [] ]; }
-    public readonly OperationCode!: ForwardOpCodes.memory_init;
+    public readonly OperationCode!: OpCodesExt1.memory_init;
     public Data: Sections.DataSegment;
     public constructor(data: Sections.DataSegment) {
-        super(OpCodes.look_forward);
-        protect(this, 'OperationCode', ForwardOpCodes.memory_init, true);
+        super(OpCodes.op_extension_1);
+        protect(this, 'OperationCode', OpCodesExt1.memory_init, true);
         this.Data = data;
     }
     public getDataIndex(context: ExpressionContext, pass?: boolean): number {
@@ -1013,13 +1022,13 @@ export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.loo
         return new MemoryInitInstruction(context.module.DataSection.Datas[index]!)
     }
 }
-MemoryInitInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.memory_init);
-export class DataDropInstruction extends AbstractMemoryInstruction<OpCodes.look_forward> {
-    public readonly OperationCode!: ForwardOpCodes.data_drop;
+MemoryInitInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.memory_init);
+export class DataDropInstruction extends AbstractMemoryInstruction<OpCodes.op_extension_1> {
+    public readonly OperationCode!: OpCodesExt1.data_drop;
     public Data: Sections.DataSegment;
     public constructor(data: Sections.DataSegment) {
-        super(OpCodes.look_forward);
-        protect(this, 'OperationCode', ForwardOpCodes.data_drop, true);
+        super(OpCodes.op_extension_1);
+        protect(this, 'OperationCode', OpCodesExt1.data_drop, true);
         this.Data = data;
     }
     public getDataIndex(context: ExpressionContext, pass?: boolean): number {
@@ -1038,13 +1047,13 @@ export class DataDropInstruction extends AbstractMemoryInstruction<OpCodes.look_
         return new DataDropInstruction(context.module.DataSection.Datas[index]!)
     }
 }
-DataDropInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.data_drop);
-export class MemoryCopyInstruction extends AbstractMemoryInstruction<OpCodes.look_forward> {
+DataDropInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.data_drop);
+export class MemoryCopyInstruction extends AbstractMemoryInstruction<OpCodes.op_extension_1> {
     public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32, Types.Type.i32 ], [] ]; }
-    public readonly OperationCode!: ForwardOpCodes.memory_copy;
+    public readonly OperationCode!: OpCodesExt1.memory_copy;
     public constructor() {
-        super(OpCodes.look_forward);
-        protect(this, 'OperationCode', ForwardOpCodes.memory_copy, true);
+        super(OpCodes.op_extension_1);
+        protect(this, 'OperationCode', OpCodesExt1.memory_copy, true);
     }
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
         super.encode(encoder, context);
@@ -1052,13 +1061,13 @@ export class MemoryCopyInstruction extends AbstractMemoryInstruction<OpCodes.loo
     }
     public static readonly instance = new MemoryCopyInstruction();
 }
-MemoryCopyInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.memory_copy);
-export class MemoryFillInstruction extends AbstractMemoryInstruction<OpCodes.look_forward> {
+MemoryCopyInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.memory_copy);
+export class MemoryFillInstruction extends AbstractMemoryInstruction<OpCodes.op_extension_1> {
     public override get stack(): StackEdit { return [ [ Types.Type.i32, Types.Type.i32, Types.Type.i32 ], [] ]; }
-    public readonly OperationCode!: ForwardOpCodes.memory_fill;
+    public readonly OperationCode!: OpCodesExt1.memory_fill;
     public constructor() {
-        super(OpCodes.look_forward);
-        protect(this, 'OperationCode', ForwardOpCodes.memory_fill, true);
+        super(OpCodes.op_extension_1);
+        protect(this, 'OperationCode', OpCodesExt1.memory_fill, true);
     }
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
         super.encode(encoder, context);
@@ -1066,7 +1075,7 @@ export class MemoryFillInstruction extends AbstractMemoryInstruction<OpCodes.loo
     }
     public static readonly instance = new MemoryFillInstruction();
 }
-MemoryFillInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.memory_fill);
+MemoryFillInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.memory_fill);
 
 export abstract class AbstractNumericInstruction<O extends OpCodes> extends Instruction<O> { }
 
@@ -1895,66 +1904,66 @@ export class F64ReinterpretI64Instruction extends AbstractNumericInstruction<OpC
 F64ReinterpretI64Instruction.registerInstruction(OpCodes.f64_reinterpret_i64);
 
 export type NumericTruncateInstructionCodes =
-    ForwardOpCodes.i32_trunc_sat_f32_s | ForwardOpCodes.i32_trunc_sat_f32_u |
-    ForwardOpCodes.i32_trunc_sat_f64_s | ForwardOpCodes.i32_trunc_sat_f64_u |
-    ForwardOpCodes.i64_trunc_sat_f32_s | ForwardOpCodes.i64_trunc_sat_f32_u |
-    ForwardOpCodes.i64_trunc_sat_f64_s | ForwardOpCodes.i64_trunc_sat_f64_u; 
-export abstract class NumericTruncateInstruction<O extends NumericTruncateInstructionCodes> extends AbstractNumericInstruction<OpCodes.look_forward> {
+    OpCodesExt1.i32_trunc_sat_f32_s | OpCodesExt1.i32_trunc_sat_f32_u |
+    OpCodesExt1.i32_trunc_sat_f64_s | OpCodesExt1.i32_trunc_sat_f64_u |
+    OpCodesExt1.i64_trunc_sat_f32_s | OpCodesExt1.i64_trunc_sat_f32_u |
+    OpCodesExt1.i64_trunc_sat_f64_s | OpCodesExt1.i64_trunc_sat_f64_u; 
+export abstract class NumericTruncateInstruction<O extends NumericTruncateInstructionCodes> extends AbstractNumericInstruction<OpCodes.op_extension_1> {
     public readonly OperationCode!: O;
-    protected constructor(code: O) { super(OpCodes.look_forward); protect(this, 'OperationCode', code, true); }
+    protected constructor(code: O) { super(OpCodes.op_extension_1); protect(this, 'OperationCode', code, true); }
     public override encode(encoder: IEncoder, context: ExpressionContext): void {
         super.encode(encoder, context);
         encoder.uint32(this.OperationCode)
     }
 }
-export class I32TruncateSaturationF32SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f32_s> {
+export class I32TruncateSaturationF32SignedInstruction extends NumericTruncateInstruction<OpCodesExt1.i32_trunc_sat_f32_s> {
     public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.i32 ] ] }
-    private constructor() { super(ForwardOpCodes.i32_trunc_sat_f32_s); }
+    private constructor() { super(OpCodesExt1.i32_trunc_sat_f32_s); }
     public static readonly instance = new I32TruncateSaturationF32SignedInstruction();
 }
-I32TruncateSaturationF32SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f32_s);
-export class I32TruncateSaturationF64SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f64_s> {
+I32TruncateSaturationF32SignedInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.i32_trunc_sat_f32_s);
+export class I32TruncateSaturationF64SignedInstruction extends NumericTruncateInstruction<OpCodesExt1.i32_trunc_sat_f64_s> {
     public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.i32 ] ] }
-    private constructor() { super(ForwardOpCodes.i32_trunc_sat_f64_s); }
+    private constructor() { super(OpCodesExt1.i32_trunc_sat_f64_s); }
     public static readonly instance = new I32TruncateSaturationF64SignedInstruction();
 }
-I32TruncateSaturationF64SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f64_s);
-export class I32TruncateSaturationF32UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f32_u> {
+I32TruncateSaturationF64SignedInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.i32_trunc_sat_f64_s);
+export class I32TruncateSaturationF32UnsignedInstruction extends NumericTruncateInstruction<OpCodesExt1.i32_trunc_sat_f32_u> {
     public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.i32 ] ] }
-    private constructor() { super(ForwardOpCodes.i32_trunc_sat_f32_u); }
+    private constructor() { super(OpCodesExt1.i32_trunc_sat_f32_u); }
     public static readonly instance = new I32TruncateSaturationF32UnsignedInstruction();
 }
-I32TruncateSaturationF32UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f32_u);
-export class I32TruncateSaturationF64UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i32_trunc_sat_f64_u> {
+I32TruncateSaturationF32UnsignedInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.i32_trunc_sat_f32_u);
+export class I32TruncateSaturationF64UnsignedInstruction extends NumericTruncateInstruction<OpCodesExt1.i32_trunc_sat_f64_u> {
     public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.i32 ] ] }
-    private constructor() { super(ForwardOpCodes.i32_trunc_sat_f64_u); }
+    private constructor() { super(OpCodesExt1.i32_trunc_sat_f64_u); }
     public static readonly instance = new I32TruncateSaturationF64UnsignedInstruction();
 }
-I32TruncateSaturationF64UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i32_trunc_sat_f64_u);
-export class I64TruncateSaturationF32SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f32_s> {
+I32TruncateSaturationF64UnsignedInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.i32_trunc_sat_f64_u);
+export class I64TruncateSaturationF32SignedInstruction extends NumericTruncateInstruction<OpCodesExt1.i64_trunc_sat_f32_s> {
     public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.i64 ] ] }
-    private constructor() { super(ForwardOpCodes.i64_trunc_sat_f32_s); }
+    private constructor() { super(OpCodesExt1.i64_trunc_sat_f32_s); }
     public static readonly instance = new I64TruncateSaturationF32SignedInstruction();
 }
-I64TruncateSaturationF32SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f32_s);
-export class I64TruncateSaturationF64SignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f64_s> {
+I64TruncateSaturationF32SignedInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.i64_trunc_sat_f32_s);
+export class I64TruncateSaturationF64SignedInstruction extends NumericTruncateInstruction<OpCodesExt1.i64_trunc_sat_f64_s> {
     public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.i64 ] ] }
-    private constructor() { super(ForwardOpCodes.i64_trunc_sat_f64_s); }
+    private constructor() { super(OpCodesExt1.i64_trunc_sat_f64_s); }
     public static readonly instance = new I64TruncateSaturationF64SignedInstruction();
 }
-I64TruncateSaturationF64SignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f64_s);
-export class I64TruncateSaturationF32UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f32_u> {
+I64TruncateSaturationF64SignedInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.i64_trunc_sat_f64_s);
+export class I64TruncateSaturationF32UnsignedInstruction extends NumericTruncateInstruction<OpCodesExt1.i64_trunc_sat_f32_u> {
     public override get stack(): StackEdit { return [ [ Types.Type.f32 ], [ Types.Type.i64 ] ] }
-    private constructor() { super(ForwardOpCodes.i64_trunc_sat_f32_u); }
+    private constructor() { super(OpCodesExt1.i64_trunc_sat_f32_u); }
     public static readonly instance = new I64TruncateSaturationF32UnsignedInstruction();
 }
-I64TruncateSaturationF32UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f32_u);
-export class I64TruncateSaturationF64UnsignedInstruction extends NumericTruncateInstruction<ForwardOpCodes.i64_trunc_sat_f64_u> {
+I64TruncateSaturationF32UnsignedInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.i64_trunc_sat_f32_u);
+export class I64TruncateSaturationF64UnsignedInstruction extends NumericTruncateInstruction<OpCodesExt1.i64_trunc_sat_f64_u> {
     public override get stack(): StackEdit { return [ [ Types.Type.f64 ], [ Types.Type.i64 ] ] }
-    private constructor() { super(ForwardOpCodes.i64_trunc_sat_f64_u); }
+    private constructor() { super(OpCodesExt1.i64_trunc_sat_f64_u); }
     public static readonly instance = new I64TruncateSaturationF64UnsignedInstruction();
 }
-I64TruncateSaturationF64UnsignedInstruction.registerInstruction(OpCodes.look_forward, ForwardOpCodes.i64_trunc_sat_f64_u);
+I64TruncateSaturationF64UnsignedInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.i64_trunc_sat_f64_u);
 
 
 export const NumericInstruction = {
