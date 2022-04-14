@@ -1,0 +1,5 @@
+export * from './AbstractBranchInstruction'
+export * from './BranchIfInstruction'
+export * from './BranchInstruction'
+export * from './BranchTableInstruction'
+export * from './ReturnInstruction'

@@ -1,0 +1,5 @@
+export * from './FunctionType'
+export * from './GlobalType'
+export * from './LimitType'
+export * from './TableType'
+export * from './Type'

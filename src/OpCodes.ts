@@ -473,7 +473,7 @@ export enum OpCodes {
     /** Check if the last element of the stack is equal to zero.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1] --> $1 == 0
+     * `stack: [$1] --> $1 == 0`
      * 
      * `(i32.eqz)`
      * 
@@ -483,7 +483,7 @@ export enum OpCodes {
     /** Check if the last two element of the stack are equal.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 == $2
+     * `stack: [$1, $2] --> $1 == $2`
      * 
      * `(i32.eq)`
      * 
@@ -493,7 +493,7 @@ export enum OpCodes {
     /** Check if the last two element of the stack are not equal.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 != $2
+     * `stack: [$1, $2] --> $1 != $2`
      * 
      * `(i32.ne)`
      * 
@@ -505,7 +505,7 @@ export enum OpCodes {
      * The two elements are considered signed
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 < $2
+     * `stack: [$1, $2] --> $1 < $2`
      * 
      * `(i32.lt_s)`
      * 
@@ -517,7 +517,7 @@ export enum OpCodes {
      * The two elements are considered unsigned
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 < $2
+     * `stack: [$1, $2] --> $1 < $2`
      * 
      * `(i32.lt_u)`
      * 
@@ -529,7 +529,7 @@ export enum OpCodes {
      * The two elements are considered signed
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 > $2
+     * `stack: [$1, $2] --> $1 > $2`
      * 
      * `(i32.gt_s)`
      * 
@@ -541,7 +541,7 @@ export enum OpCodes {
      * The two elements are considered unsigned
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 > $2
+     * `stack: [$1, $2] --> $1 > $2`
      * 
      * `(i32.gt_u)`
      * 
@@ -553,7 +553,7 @@ export enum OpCodes {
      * The two elements are considered signed
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 <= $2
+     * `stack: [$1, $2] --> $1 <= $2`
      * 
      * `(i32.le_s)`
      * 
@@ -565,7 +565,7 @@ export enum OpCodes {
      * The two elements are considered unsigned
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 <= $2
+     * `stack: [$1, $2] --> $1 <= $2`
      * 
      * `(i32.le_u)`
      * 
@@ -577,7 +577,7 @@ export enum OpCodes {
      * The two elements are considered signed
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 >= $2
+     * `stack: [$1, $2] --> $1 >= $2`
      * 
      * `(i32.ge_s)`
      * 
@@ -589,7 +589,7 @@ export enum OpCodes {
      * The two elements are considered unsigned
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 >= $2
+     * `stack: [$1, $2] --> $1 >= $2`
      * 
      * `(i32.ge_u)`
      * 
@@ -599,7 +599,7 @@ export enum OpCodes {
     /** Check if the last element of the stack is equal to zero.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1] --> $1 == 0
+     * `stack: [$1] --> $1 == 0`
      * 
      * `(i64.eqz)`
      * 
@@ -609,7 +609,7 @@ export enum OpCodes {
     /** Check if the last two element of the stack are equal.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 == $2
+     * `stack: [$1, $2] --> $1 == $2`
      * 
      * `(i64.eq)`
      * 
@@ -619,7 +619,7 @@ export enum OpCodes {
     /** Check if the last two element of the stack are not equal.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 != $2
+     * `stack: [$1, $2] --> $1 != $2`
      * 
      * `(i64.ne)`
      * 
@@ -631,7 +631,7 @@ export enum OpCodes {
      * The two elements are considered signed
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 < $2
+     * `stack: [$1, $2] --> $1 < $2`
      * 
      * `(i64.lt_s)`
      * 
@@ -643,7 +643,7 @@ export enum OpCodes {
      * The two elements are considered unsigned
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 < $2
+     * `stack: [$1, $2] --> $1 < $2`
      * 
      * `(i64.lt_u)`
      * 
@@ -655,7 +655,7 @@ export enum OpCodes {
      * The two elements are considered signed
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 > $2
+     * `stack: [$1, $2] --> $1 > $2`
      * 
      * `(i64.gt_s)`
      * 
@@ -667,7 +667,7 @@ export enum OpCodes {
      * The two elements are considered unsigned
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 > $2
+     * `stack: [$1, $2] --> $1 > $2`
      * 
      * `(i64.gt_u)`
      * 
@@ -679,7 +679,7 @@ export enum OpCodes {
      * The two elements are considered signed
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 <= $2
+     * `stack: [$1, $2] --> $1 <= $2`
      * 
      * `(i64.le_s)`
      * 
@@ -691,7 +691,7 @@ export enum OpCodes {
      * The two elements are considered unsigned
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 <= $2
+     * `stack: [$1, $2] --> $1 <= $2`
      * 
      * `(i64.le_u)`
      * 
@@ -703,7 +703,7 @@ export enum OpCodes {
      * The two elements are considered signed
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 >= $2
+     * `stack: [$1, $2] --> $1 >= $2`
      * 
      * `(i64.ge_s)`
      * 
@@ -715,7 +715,7 @@ export enum OpCodes {
      * The two elements are considered unsigned
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 >= $2
+     * `stack: [$1, $2] --> $1 >= $2`
      * 
      * `(i64.ge_u)`
      * 
@@ -725,7 +725,7 @@ export enum OpCodes {
     /** Check if the last two element of the stack are equal.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 == $2
+     * `stack: [$1, $2] --> $1 == $2`
      * 
      * `(f32.eq)`
      * 
@@ -735,7 +735,7 @@ export enum OpCodes {
     /** Check if the last two element of the stack are not equal.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 != $2
+     * `stack: [$1, $2] --> $1 != $2`
      * 
      * `(f32.ne)`
      * 
@@ -746,7 +746,7 @@ export enum OpCodes {
      * strictly lesser with respect to the last one.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 < $2
+     * `stack: [$1, $2] --> $1 < $2`
      * 
      * `(f32.lt)`
      * 
@@ -757,7 +757,7 @@ export enum OpCodes {
      * strictly greater with respect to the last one.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 > $2
+     * `stack: [$1, $2] --> $1 > $2`
      * 
      * `(f32.gt)`
      * 
@@ -768,7 +768,7 @@ export enum OpCodes {
      * lesser or equal with respect to the last one.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 <= $2
+     * `stack: [$1, $2] --> $1 <= $2`
      * 
      * `(f32.le)`
      * 
@@ -779,7 +779,7 @@ export enum OpCodes {
      * greater or equal with respect to the last one.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 <= $2
+     * `stack: [$1, $2] --> $1 <= $2`
      * 
      * `(f32.ge)`
      * 
@@ -789,7 +789,7 @@ export enum OpCodes {
     /** Check if the last two element of the stack are equal.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 == $2
+     * `stack: [$1, $2] --> $1 == $2`
      * 
      * `(f64.eq)`
      * 
@@ -799,7 +799,7 @@ export enum OpCodes {
     /** Check if the last two element of the stack are not equal.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 != $2
+     * `stack: [$1, $2] --> $1 != $2`
      * 
      * `(f64.ne)`
      * 
@@ -810,7 +810,7 @@ export enum OpCodes {
      * strictly lesser with respect to the last one.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 < $2
+     * `stack: [$1, $2] --> $1 < $2`
      * 
      * `(f64.lt)`
      * 
@@ -821,7 +821,7 @@ export enum OpCodes {
      * strictly greater with respect to the last one.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 > $2
+     * `stack: [$1, $2] --> $1 > $2`
      * 
      * `(f64.gt)`
      * 
@@ -832,7 +832,7 @@ export enum OpCodes {
      * lesser or equal with respect to the last one.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 <= $2
+     * `stack: [$1, $2] --> $1 <= $2`
      * 
      * `(f64.le)`
      * 
@@ -843,7 +843,7 @@ export enum OpCodes {
      * greater or equal with respect to the last one.
      * Returns a boolean (i32: 0 = false, 1 = true)
      * 
-     * `stack: [$1, $2] --> $1 >= $2
+     * `stack: [$1, $2] --> $1 >= $2`
      * 
      * `(f64.le)`
      * 
@@ -1671,7 +1671,7 @@ export enum OpCodes {
     /** Check if the last element of the stack is a null reference.
     * Returns a boolean (i32: 0 = false, 1 = true)
     * 
-    * `stack: [$1] --> $1 == null
+    * `stack: [$1] --> $1 == null`
     * 
     * `(ref.is_null)`
     * 
@@ -1689,13 +1689,13 @@ export enum OpCodes {
     /** Extend the instruction to a more advanced one.
      * Look the next byte to discriminate the instruction
      * (binary format only).
-     * See `OpCodesExt1` for more details
+     * @see {@link OpCodesExt1}
      */
     op_extension_1             = 0xfc,
     /** Extend the instruction to a more advanced one.
      * Look the next byte to discriminate the instruction
      * (binary format only).
-     * See `OpCodesExt2` for more details
+     * @see {@link OpCodesExt2}
      */
      op_extension_2             = 0xfd
 }
@@ -1714,6 +1714,8 @@ export enum OpCodesExt1 {
      * `(i32.i32_trunc_sat_f32_s)`
      * 
      * `[f32] --> [i32]`
+     * 
+     * @see {@link OpCodes.i32_trunc_f32_s}
      */
     i32_trunc_sat_f32_s       = 0x00,
     /** Truncate with saturation a f32 to a unsigned i32.
@@ -1726,6 +1728,8 @@ export enum OpCodesExt1 {
      * `(i32.i32_trunc_sat_f32_u)`
      * 
      * `[f32] --> [i32]`
+     * 
+     * @see {@link OpCodes.i32_trunc_f32_u}
      */
     i32_trunc_sat_f32_u       = 0x01,
     /** Truncate with saturation a f64 to a signed i32.
@@ -1738,6 +1742,8 @@ export enum OpCodesExt1 {
      * `(i32.i32_trunc_sat_f64_s)`
      * 
      * `[f64] --> [i32]`
+     * 
+     * @see {@link OpCodes.i32_trunc_f64_s}
      */
     i32_trunc_sat_f64_s       = 0x02,
     /** Truncate with saturation a f64 to a unsigned i32.
@@ -1750,6 +1756,8 @@ export enum OpCodesExt1 {
      * `(i32.i32_trunc_sat_f64_u)`
      * 
      * `[f64] --> [i32]`
+     * 
+     * @see {@link OpCodes.i32_trunc_f64_u}
      */
     i32_trunc_sat_f64_u       = 0x03,
     /** Truncate with saturation a f32 to a signed i64.
@@ -1762,6 +1770,8 @@ export enum OpCodesExt1 {
      * `(i64.i64_trunc_sat_f32_s)`
      * 
      * `[f32] --> [i64]`
+     * 
+     * @see {@link OpCodes.i64_trunc_f32_s}
      */
     i64_trunc_sat_f32_s       = 0x04,
     /** Truncate with saturation a f32 to a unsigned i64.
@@ -1774,6 +1784,8 @@ export enum OpCodesExt1 {
      * `(i64.i64_trunc_sat_f32_u)`
      * 
      * `[f32] --> [i64]`
+     * 
+     * @see {@link OpCodes.i64_trunc_f32_u}
      */
     i64_trunc_sat_f32_u       = 0x05,
     /** Truncate with saturation a f64 to a signed i64.
@@ -1786,6 +1798,8 @@ export enum OpCodesExt1 {
      * `(i64.i64_trunc_sat_f64_s)`
      * 
      * `[f64] --> [i64]`
+     * 
+     * @see {@link OpCodes.i64_trunc_f64_s}
      */
     i64_trunc_sat_f64_s       = 0x06,
     /** Truncate with saturation a f64 to a unsigned i64.
@@ -1798,6 +1812,8 @@ export enum OpCodesExt1 {
      * `(i64.i64_trunc_sat_f64_u)`
      * 
      * `[f64] --> [i64]`
+     * 
+     * @see {@link OpCodes.i64_trunc_f64_u}
      */
     i64_trunc_sat_f64_u       = 0x07,
     /** Copy data from a passive data segment into a memory.
