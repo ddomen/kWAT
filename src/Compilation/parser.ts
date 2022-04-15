@@ -1,6 +1,11 @@
 import type { Module } from '../Module';
 
-export interface IParser { parse(text: string): Module }
+/** Parser interface, define an object that can parse a string into a module */
+export interface IParser {
+    /** Parse a string and convert it into a module */
+    parse(text: string): Module
+}
+/** A constructor for a parser */
 export type IParserCtor = new() => IParser;
 
 type SExpression = (string | SExpression)[];
@@ -86,7 +91,13 @@ class State {
 
 }
 
+/** A simple S-Expression parser */
 export class SExpressionParser implements IParser {
+    /** @internal
+     * Read an S-Expression
+     * @param {State} state the current input state
+     * @return {SExpression} the read expression
+     */
     private _sexpression(state: State): SExpression {
         state.skipWhites();
         state.checkCharacter('(', true);
