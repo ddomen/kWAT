@@ -183,14 +183,14 @@ export class ImportSection extends Section<SectionTypes.import> {
         }
         this.Imports.push(segment.clone());
         if (mod) {
-            let target;
+            let target = null;
             switch (segment.code) {
                 case ExchangeDescriptionCode.function: target = mod.TypeSection; break
                 case ExchangeDescriptionCode.global: target = mod.GlobalSection; break
-                case ExchangeDescriptionCode.memory: target = mod.MemorySection; break
-                case ExchangeDescriptionCode.table: target = mod.TableSection; break
+                // case ExchangeDescriptionCode.memory: target = mod.MemorySection; break
+                // case ExchangeDescriptionCode.table: target = mod.TableSection; break
             }
-            target.import(segment.Description as any);
+            target && target.add(segment.Description as any);
         }
         return true;
     }

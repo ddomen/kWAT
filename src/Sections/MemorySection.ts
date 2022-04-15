@@ -27,14 +27,6 @@ export class MemorySection extends Section<SectionTypes.memory> {
         return false;
     }
 
-    /** Add a new memory description to this section if not already present
-     * @param {Types.MemoryType} memory the memory description to add
-     * @returns {boolean} success of the insertion
-     */
-    public import(memory: Types.MemoryType): boolean {
-        return this.add(memory);
-    }
-
     public override contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         if (!this.Memories.length) { return; }
         if (!opts.multipleMemory) {

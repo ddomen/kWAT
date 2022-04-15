@@ -107,16 +107,6 @@ export class GlobalSection extends Section<SectionTypes.global> {
         }
         return false;
     }
-
-    /** Add a new global variable to the section.
-     * Note that is not possible to add a reference variable
-     * as it is not a real declaration
-     * @param {GlobalVariable} variable the variable to be added
-     * @returns {boolean} the success of the operation
-     */
-    public import(variable: GlobalVariable): boolean {
-        return this.add(variable);
-    }
     
     public override contentEncode(encoder: IEncoder, mod: Module): void {
         if (!this.Globals.length) { return; }

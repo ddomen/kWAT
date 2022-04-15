@@ -210,6 +210,23 @@ export class Module implements IEncodable<WasmOptions> {
         protect(this, 'CustomSections', [], true);
     }
 
+    /** Set the current module Wasm version.
+     * 
+     * Actually Wasm runtimes expect the version to be equal to `1.0.0.0` (or `0x00000001`)
+     * @param {number} major major version `(x._._._)`
+     * @param {number} minor minor version `(_.x._._)`
+     * @param {number} patch patch version `(_._.x._)`
+     * @param {number} build build version `(_._._.x)`
+     * @returns {this} the module itself (chainable method)
+     */
+    public SetVersion(major: number, minor: number=0, patch: number=0, build: number=0): this {
+        this.Version =  (major & 0xff) |
+                        ((minor & 0xff) << 8) |
+                        ((patch & 0xff) << 16) |
+                        ((build & 0xff) << 24);
+        return this;
+    }
+
     /** Encode this module through an encoder
      * @param {IEncoder} encoder the encoder target of the writing
      * @param {WasmOptions} [options] the options used to write the module to the encoder

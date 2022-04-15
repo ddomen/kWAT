@@ -19,7 +19,7 @@ export class TableSection extends Section<SectionTypes.table> {
      * @param {Types.TableType} table the table description to add
      * @returns {boolean} success of the insertion
      */
-    public import(table: Types.TableType): boolean {
+    public add(table: Types.TableType): boolean {
         if (this.Tables.indexOf(table) == -1){
             this.Tables.unshift(table);
             return true;

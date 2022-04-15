@@ -35,15 +35,6 @@ export class TypeSection extends Section<SectionTypes.type> {
         return false;
     }
 
-    /** Add a new type to this section if not already present
-     * (by checking the signature)
-     * @param {Types.FunctionType} type the type to add
-     * @returns {boolean} success of the insertion
-     */
-    public import(type: Types.FunctionType): boolean {
-        return this.add(type);
-    }
-
     protected override contentEncode(encoder: IEncoder): void {
         if (!this.Types.length) { return; }
         encoder.vector(this.Types);
