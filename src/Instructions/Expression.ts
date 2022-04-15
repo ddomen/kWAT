@@ -18,6 +18,9 @@ export class Expression implements IEncodable<[Module, WasmOptions]> {
 
     public readonly Instructions!: Instruction[];
     
+    /** Create and fill an expression of instructions
+     * @param {Instruction[]} instructions the instruction holded by the new expression
+     */
     public constructor(instructions: Instruction[]=[]) {
         protect(this, 'Instructions', instructions.slice(), true);
     }
