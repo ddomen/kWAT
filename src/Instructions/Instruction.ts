@@ -132,9 +132,11 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
         return result && result.length == expected.length &&
                 result.every((v, i) => v === expected[i]) || false;
     }
-}
 
-export const AllInstructionsTypes =
-    Object.values((Instruction as any)._instructionSet)
-        .concat(Object.values((Instruction as any).__ext1Set))
-        .concat(Object.values((Instruction as any).__ext2Set)) as InstructionCtor<Instruction, any[]>[];
+    public static get AllInstructionTypes(): InstructionCtor<Instruction, any[]>[] {
+        return Object.values(Instruction._instructionSet)
+            .concat(Object.values(Instruction._ext1Set))
+            .concat(Object.values(Instruction._ext2Set))
+            .map(x => 'instance' in x ? x.instance.constructor : x as any);
+    }
+}

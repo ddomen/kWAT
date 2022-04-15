@@ -1,6 +1,5 @@
 import { protect } from '../internal';
 import { Section, SectionTypes } from './Section';
-import { UnkownCustomSection } from './CustomSections/UnknownCustomSection';
 import type { IEncoder, IDecoder } from '../Encoding';
 
 type CustomSectionCtor = { new(name: string): CustomSection };
@@ -48,7 +47,7 @@ export abstract class CustomSection extends Section<SectionTypes.custom> {
         let name = decoder.vector('utf8');
         let type =  CustomSection._customTypes[('' + name).toLowerCase()];
         if (type) { return new type(name); }
-        return new UnkownCustomSection(name);
+        return new CustomSection._customTypes['unknown']!(name);
     }
 
     private static readonly _customTypes: { [key: string]: CustomSectionCtor } = { };

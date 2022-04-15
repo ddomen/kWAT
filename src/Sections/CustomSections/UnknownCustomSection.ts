@@ -16,3 +16,4 @@ export class UnkownCustomSection extends CustomSection {
         this.Bytes.push(...decoder.read(decoder.remaining));
     }
 }
+UnkownCustomSection.registerCustomType('unknown')

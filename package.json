@@ -4,6 +4,7 @@
   "description": "WebAssembly compiler toolkit",
   "main": "dist/index.js",
   "scripts": {
+    "build": "npx tsc",
     "docs": "npx typedoc src/index.ts",
     "test": "npx jasmine-ts --config=jasmine.json"
   },

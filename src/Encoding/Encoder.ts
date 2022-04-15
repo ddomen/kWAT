@@ -381,7 +381,7 @@ export class Encoder implements IEncoder {
     public uint8(value: number): this { this._data.push(value & 0xff); return this; }
     public uint32(value: number, relaxed?: Relaxation): this {
         switch (relaxed || this.relaxation) {
-            case Relaxations.Full:
+            case Relaxations.None:
                 this._data.push(
                      value         & 0xff,
                     (value >>>  8) & 0xff,
@@ -389,7 +389,7 @@ export class Encoder implements IEncoder {
                     (value >>> 24) & 0xff
                 );
                 break;
-            case Relaxations.None:
+            case Relaxations.Full:
                 this._data.push(
                     ( value         & 0x7f) | 0x80,
                     ((value >>>  7) & 0x7f) | 0x80,
@@ -397,6 +397,7 @@ export class Encoder implements IEncoder {
                     ((value >>> 21) & 0x7f) | 0x80,
                     ((value >>> 28) & 0xff)
                 )
+                break;
             case Relaxations.Canonical:
             default: enc_u_leb128(value, this._data, 32); break;
         }
