@@ -1,15 +1,16 @@
 import { protect } from '../internal';
 import { OpCodes, OpCodesExt1, OpCodesExt2 } from '../OpCodes';
 import * as Types from '../Types'
-import type { Module } from '../Module';
+import type { Module, WasmOptions } from '../Module';
 import type { IDecodable, IDecoder, IEncodable, IEncoder } from '../Encoding';
 import type { Expression, Passable } from './Expression';
 import type { AbstractBlockInstruction } from './Block';
 
-export type Instructible<O extends OpCodes=OpCodes> = { instance: Instruction<O> } | IDecodable<Instruction<O>, [ ExpressionContext ]>;
-export type Ext1Instructible<O extends OpCodesExt1=OpCodesExt1> = { instance: Ext1Instruction<O> } | IDecodable<Ext1Instruction<O>, [ ExpressionContext ]>;
-export type Ext2Instructible<O extends OpCodesExt2=OpCodesExt2> = { instance: Ext2Instruction<O> } | IDecodable<Ext2Instruction<O>, [ ExpressionContext ]>;
-export type ExpressionContext = { module: Module, blocks: AbstractBlockInstruction[] };
+export type Instructible<O extends OpCodes=OpCodes> = { instance: Instruction<O> } | IDecodable<Instruction<O>, [ ExpressionDecodeContext ]>;
+export type Ext1Instructible<O extends OpCodesExt1=OpCodesExt1> = { instance: Ext1Instruction<O> } | IDecodable<Ext1Instruction<O>, [ ExpressionDecodeContext ]>;
+export type Ext2Instructible<O extends OpCodesExt2=OpCodesExt2> = { instance: Ext2Instruction<O> } | IDecodable<Ext2Instruction<O>, [ ExpressionDecodeContext ]>;
+export type ExpressionDecodeContext = { module: Module, blocks: AbstractBlockInstruction[] };
+export type ExpressionEncodeContext = ExpressionDecodeContext & { options: WasmOptions };
 export type StackEdit = [ (Types.ValueType | null)[], (Types.ValueType | { ref: number })[] ];
 export type DefiniteStackEdit = [ Types.Stack, Types.Stack ];
 export type InstructionCtor<I extends Instruction, Args extends any[]=[]> = { new(...args: Args): I };
@@ -17,7 +18,7 @@ export type InstructionCtor<I extends Instruction, Args extends any[]=[]> = { ne
 export type Ext1Instruction<O extends OpCodesExt1=OpCodesExt1> = Instruction<OpCodes.op_extension_1> & { OperationCode: O };
 export type Ext2Instruction<O extends OpCodesExt2=OpCodesExt2> = Instruction<OpCodes.op_extension_2> & { OperationCode: O };
 
-export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodable<ExpressionContext> {
+export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodable<ExpressionEncodeContext> {
     public readonly Code!: O;
     public get stack(): StackEdit { return [ [], [] ]; }
     protected constructor(code: O) { protect(this, 'Code', code, true); }
@@ -26,7 +27,7 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
         if (!pass && index < 0) { throw new Error('Instruction not present in the current expression'); }
         return index;
     }
-    public encode(encoder: IEncoder, _: ExpressionContext): void { encoder.uint8(this.Code); }
+    public encode(encoder: IEncoder, _: ExpressionEncodeContext): void { encoder.uint8(this.Code); }
 
     public evaluate(stack: Types.Stack): Passable<undefined, Types.ResultType>;
     public evaluate<B extends boolean>(stack: Types.Stack, pass: B): Passable<B, Types.ResultType>;
@@ -81,7 +82,7 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
         else if (!(key in OpCodes)) { throw new Error('Invalid opcode 0x' + Number(key).toString(16)); }
         else { Instruction._instructionSet[key] = this as Instructible; }
     }
-    public static decode(decoder: IDecoder, context: ExpressionContext): Instruction {
+    public static decode(decoder: IDecoder, context: ExpressionDecodeContext): Instruction {
         let code: OpCodes = decoder.uint8(), fwd: OpCodesExt1 | OpCodesExt2 = -1, ctor;
         if (code === OpCodes.op_extension_1) { ctor = Instruction._ext1Set[(fwd = decoder.uint32() as OpCodesExt1)]; }
         else if (code === OpCodes.op_extension_2) { ctor = Instruction._ext2Set[(fwd = decoder.uint32() as OpCodesExt2)]; }

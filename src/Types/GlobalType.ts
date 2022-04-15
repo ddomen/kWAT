@@ -1,9 +1,10 @@
 import type { ValueType } from './Type';
+import type { WasmOptions } from '../Module';
 import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
 
 /** Represents a description of a type for a global variable */
-export class GlobalType implements IEncodable {
-    /** Wether the global variable is mutable or not */
+export class GlobalType implements IEncodable<WasmOptions> {
+    /** whether the global variable is mutable or not */
     public Constant: boolean;
     /** The type of the global variable */
     public Type: ValueType;
@@ -26,7 +27,7 @@ export class GlobalType implements IEncodable {
      * global type declaration of this object
      * @param {*} other the value to check againts
      * @returns {boolean}
-     *  wether the other value represents the same global type declaration
+     *  whether the other value represents the same global type declaration
      */
     public equals(other: any): boolean {
         return this === other || (
@@ -36,7 +37,10 @@ export class GlobalType implements IEncodable {
         );
     }
 
-    public encode(encoder: IEncoder): void {
+    public encode(encoder: IEncoder, opts: WasmOptions): void {
+        if (!opts.mutableGlobals && !this.Constant) {
+            throw new Error('Mutable global detected');
+        }
         encoder.uint8(this.Constant ? 0 : 1).uint8(this.Type);
     }
 

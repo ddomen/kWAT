@@ -2,13 +2,19 @@ import { protect } from '../internal';
 import { Section, SectionTypes } from './Section';
 import { FunctionType, Type, ValueType } from '../Types';
 import { Expression, Instruction } from '../Instructions';
-import type { Module } from '../Module';
+import type { Module, WasmOptions } from '../Module';
 import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
+
+type CodeSegmentContext = {
+    module: Module,
+    options: WasmOptions,
+    index: number
+}
 
 /** A segment of the code section containing the body
  * of a function defined in the module
  */
-export class CodeSegment implements IEncodable<Module> {
+export class CodeSegment implements IEncodable<[Module, WasmOptions]> {
     /** The signature of the holding function */
     public Signature: FunctionType;
     /** The body of the function */
@@ -27,12 +33,12 @@ export class CodeSegment implements IEncodable<Module> {
         protect(this, 'Locals', locals.slice(), true);
     }
 
-    public encode(encoder: IEncoder, mod: Module): void {
+    public encode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         let e = encoder.spawn();
         let l = this.Locals.reduce((a, c) => (a[c] = (a[c] || 0) + 1, a), { } as { [key: number]: number });
         e.uint32(Object.keys(l).length);
         for (let k in l) { e.uint32(l[k]!).uint8(parseInt(k)); }
-        e.encode(this.Body, mod);
+        e.encode(this.Body, mod, opts);
         encoder.uint32(e.size).append(e);
     }
 
@@ -43,7 +49,7 @@ export class CodeSegment implements IEncodable<Module> {
      *      holding function in the function section
      * @return {CodeSegment} the read code segment
     */
-    public static decode(decoder: IDecoder, context: { module: Module, index: number }): CodeSegment {
+    public static decode(decoder: IDecoder, context: CodeSegmentContext): CodeSegment {
         if (!context.module.FunctionSection.Functions[context.index]) {
             throw new Error('Invalid Code Segment function reference');
         }
@@ -59,7 +65,7 @@ export class CodeSegment implements IEncodable<Module> {
                 locals.push(l);
             }
         }
-        let body = decoder.decode(Expression, context.module);
+        let body = decoder.decode(Expression, context.module, context.options);
         if (curr - decoder.remaining !== len) { throw new Error('Invalid Code Segment length'); }
         return new CodeSegment(
             context.module.FunctionSection.Functions[context.index++]!,
@@ -101,12 +107,12 @@ export class CodeSection extends Section<SectionTypes.code> {
         return true;
     }
     
-    public contentEncode(encoder: IEncoder, mod: Module): void {
+    public contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         if (
             this.Codes.length != mod.FunctionSection.Functions.length ||
             this.Codes.some((cs, i) => !cs.Signature.equals(mod.FunctionSection.Functions[i]))
         ) { throw new Error('Code Section does not correspond to Function Section!'); }
-        encoder.vector(this.Codes, mod);
+        encoder.vector(this.Codes, mod, opts);
     }
 
     public decode(decoder: IDecoder, mod: Module): void {

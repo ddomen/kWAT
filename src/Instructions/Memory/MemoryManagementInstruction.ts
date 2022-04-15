@@ -1,7 +1,7 @@
 import { AbstractMemoryInstruction } from './AbstractMemoryInstruction';
 import type { IEncoder } from '../../Encoding';
 import type { OpCodes } from '../../OpCodes';
-import type { ExpressionContext } from '../Instruction';
+import type { ExpressionEncodeContext } from '../Instruction';
 
 export type MemoryLoadInstructionCodes =
                 OpCodes.i32_load | OpCodes.i64_load | OpCodes.f32_load | OpCodes.f64_load |
@@ -18,7 +18,7 @@ export abstract class MemoryManagementInstruction<O extends MemoryLoadInstructio
     public Align: number;
     public Offset: number;
     protected constructor(code: O) { super(code); this.Align = 0; this.Offset = 0; }
-    public override encode(encoder: IEncoder, context: ExpressionContext): void {
+    public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
         super.encode(encoder, context);
         encoder.uint32(this.Align).uint32(this.Offset);
     }

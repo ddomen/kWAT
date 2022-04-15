@@ -4,7 +4,7 @@ import * as Types from '../../Types';
 import type { IDecoder, IEncoder } from '../../Encoding';
 import type { ExpressionEncodeContext, StackEdit } from '../Instruction';
 
-export class CallIndirectInstruction extends AbstractCallInstruction<OpCodes.call_indirect> {
+export class ReturnCallIndirectInstruction extends AbstractCallInstruction<OpCodes.return_call_indirect> {
     public override get stack(): StackEdit {
         return [
             this.Type.Parameters.slice().concat([ Types.Type.i32 ]),
@@ -14,7 +14,7 @@ export class CallIndirectInstruction extends AbstractCallInstruction<OpCodes.cal
     public Type: Types.FunctionType;
     public Table: Types.TableType;
     public constructor(fn: Types.FunctionType, table: Types.TableType) {
-        super(OpCodes.call_indirect);
+        super(OpCodes.return_call_indirect);
         this.Type = fn;
         this.Table = table;
     }
@@ -34,15 +34,16 @@ export class CallIndirectInstruction extends AbstractCallInstruction<OpCodes.cal
         super.encode(encoder, context);
         encoder.uint32(tid).uint32(xid);
     }
-    public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): CallIndirectInstruction {
+    public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): ReturnCallIndirectInstruction {
+        if (!context.options.tailCall) { throw new Error('Tail call detected'); }
         let type = decoder.uint32();
         if (!context.module.TypeSection.Types[type]) { throw new Error('Call Indirect Instruction invalid type reference'); }
         let table = decoder.uint32();
         if (!context.module.TableSection.Tables[table]) { throw new Error('Call Indirect Instruction invalid table reference'); }
-        return new CallIndirectInstruction(
+        return new ReturnCallIndirectInstruction(
             context.module.TypeSection.Types[type]!,
             context.module.TableSection.Tables[table]!
         );
     }
 }
-CallIndirectInstruction.registerInstruction(OpCodes.call_indirect);
+ReturnCallIndirectInstruction.registerInstruction(OpCodes.call_indirect);

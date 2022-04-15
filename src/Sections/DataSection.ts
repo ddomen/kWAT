@@ -1,7 +1,7 @@
 import { protect } from '../internal';
 import { Expression } from '../Instructions';
 import { Section, SectionTypes } from './Section';
-import type { Module } from '../Module';
+import type { Module, WasmOptions } from '../Module';
 import type { MemoryType } from '../Types';
 import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
 
@@ -29,7 +29,7 @@ export enum DataMode {
 /** An object which contains information about
  * a data component initialization
  */
-export class DataSegment implements IEncodable<Module> {
+export class DataSegment implements IEncodable<[Module, WasmOptions]> {
     /** The mode of the segment */
     public Mode: DataMode;
     /** The memory referenced where to store the data.
@@ -83,7 +83,7 @@ export class DataSegment implements IEncodable<Module> {
         return idx;
     }
 
-    public encode(encoder: IEncoder, mod: Module): void {
+    public encode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         if (this.Mode < 0 || this.Mode > DataMode.activeExplicit) {
             throw new Error('Invalid DataSegment kind: ' + this.Mode);
         }
@@ -93,12 +93,12 @@ export class DataSegment implements IEncodable<Module> {
         switch (this.Mode) {
             case DataMode.active:
                 if (!this.Expression) { throw new Error('Invalid DataSegment[Active]'); }
-                encoder.encode(this.Expression, mod);
+                encoder.encode(this.Expression, mod, opts);
                 break;
             case DataMode.activeExplicit:
                 if (!this.Memory || !this.Expression) { throw new Error('Invalid DataSegment[ActiveExplicit]'); }
                 idx = this.getMemoryIndex(mod)
-                encoder.uint32(idx).encode(this.Expression, mod);
+                encoder.uint32(idx).encode(this.Expression, mod, opts);
                 break;
             case DataMode.passive: break;
             default: throw new Error('Invalid DataSegment kind: ' + this.Mode);
@@ -155,9 +155,9 @@ export class DataSection extends Section<SectionTypes.data> {
         return false;
     }
 
-    protected contentEncode(encoder: IEncoder, mod: Module): void {
+    protected contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         if (!this.Datas.length) { return; }
-        encoder.vector(this.Datas, mod);
+        encoder.vector(this.Datas, mod, opts);
     }
 
     public decode(decoder: IDecoder, mod: Module): void {

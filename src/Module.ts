@@ -13,7 +13,7 @@ const DefaultOptions: WasmOptions = {
     exceptions: false,
     mutableGlobals: true,
     saturateFloatToInt: false,
-    signExtension: false,
+    signExtension: true,
     SIMD: true,
     threads: false,
     multiValue: false,
@@ -34,53 +34,49 @@ export type WasmOptions = {
     /** Consider/ignore any custom section  (overriddes debugName) */
     customSections: boolean,
     
-    /** Experimental exception handling
+    /** Experimental exception handling instructions
      * @todo
     */
     exceptions: boolean,
-    /** Import/export mutable globals handling
-     * @todo
-     * */
+    /** Include mutable globals ***[Standardized]*** */
     mutableGlobals: boolean,
     /** Include saturating float-to-int instructions
      * @todo
     */
     saturateFloatToInt: boolean,
-    /** Include sign extensions instructions
-     * @todo
-    */
+    /** Include sign extensions instructions ***[Standardized]*** */
     signExtension: boolean,
     /** Include SIMD instructions (Single Instruction Multiple Data)
+     * ***[Standardized]***
      * @todo
     */
     SIMD: boolean,
-    /** Experimental threading supports
+    /** Include threading instructions
      * @todo
     */
     threads: boolean,
-    /** Multiple values support
+    /** Include multiple values instructions
      * @todo
     */
     multiValue: boolean,
-    /** Tail call optimization support
-     * @todo
-    */
+    /** Include tail call instructions */
     tailCall: boolean,
-    /** Include bulk memory instructions
-     * @todo
-    */
+    /** Include bulk memory instructions */
     bulkMemory: boolean,
-    /** Include reference type
+    /** Include reference type instructions
      * @todo
     */
     referenceTypes: boolean,
     
-    /** Allow definition of multiple tables */
+    /** Allow definition of multiple tables in the same module */
     multipleTables: boolean,
-    /** Allow definition of multiple memories */
+    /** Allow definition of multiple memories in the same module */
     multipleMemory: boolean
 }
 
+/** A class that represents a Wasm module and manage the
+ * encoding of physical and logical memory.
+ */
 export class Module implements IEncodable<WasmOptions> {
 
     /** The version used for this Wasm module (v1 default) */
@@ -208,23 +204,6 @@ export class Module implements IEncodable<WasmOptions> {
         protect(this, 'DataCountSection', new Sections.DataCountSection(), true);
         protect(this, 'CodeSection', new Sections.CodeSection(), true);
         protect(this, 'CustomSections', [], true);
-    }
-
-    /** Set the current module Wasm version.
-     * 
-     * Actually Wasm runtimes expect the version to be equal to `1.0.0.0` (or `0x00000001`)
-     * @param {number} major major version `(x._._._)`
-     * @param {number} minor minor version `(_.x._._)`
-     * @param {number} patch patch version `(_._.x._)`
-     * @param {number} build build version `(_._._.x)`
-     * @returns {this} the module itself (chainable method)
-     */
-    public SetVersion(major: number, minor: number=0, patch: number=0, build: number=0): this {
-        this.Version =  (major & 0xff) |
-                        ((minor & 0xff) << 8) |
-                        ((patch & 0xff) << 16) |
-                        ((build & 0xff) << 24);
-        return this;
     }
 
     /** Encode this module through an encoder

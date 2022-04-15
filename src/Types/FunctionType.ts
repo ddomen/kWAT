@@ -37,10 +37,10 @@ import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
         ;
     }
 
-    /** Check wether two function types describes
+    /** Check whether two function types describes
      * the same function signature.
      * @param {*} other the object to be checked
-     * @return {boolean} wether or not the two objects describe the same signature
+     * @return {boolean} whether or not the two objects describe the same signature
     */
     public equals(other: any): boolean {
         return this === other || (

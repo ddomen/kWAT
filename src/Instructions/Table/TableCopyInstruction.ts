@@ -2,7 +2,7 @@ import { TableType, Type } from '../../Types';
 import { TableInstruction } from './TableInstruction';
 import { OpCodes, OpCodesExt1 } from '../../OpCodes';
 import type { IDecoder, IEncoder } from '../../Encoding';
-import type { ExpressionContext, StackEdit } from '../Instruction';
+import type { ExpressionDecodeContext, ExpressionEncodeContext, StackEdit } from '../Instruction';
 
 export class TableCopyInstruction extends TableInstruction<OpCodesExt1.table_copy> {
     public Destination: TableType;
@@ -13,18 +13,19 @@ export class TableCopyInstruction extends TableInstruction<OpCodesExt1.table_cop
         super(OpCodesExt1.table_copy, table);
         this.Destination = destination;
     }
-    public getDestinationIndex(context: ExpressionContext, pass?: boolean): number {
+    public getDestinationIndex(context: ExpressionEncodeContext, pass?: boolean): number {
         let index = context.module.TableSection.Tables.indexOf(this.Destination);
         if(!pass && index < 0) { throw new Error('Table Instruction invalid destination table reference'); }
         return index;
     }
-    public override encode(encoder: IEncoder, context: ExpressionContext): void {
+    public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
+        if (!context.options.bulkMemory) { throw new Error('Bulk memory instruction detected'); }
         let dst = this.getDestinationIndex(context),
             src = this.getTableIndex(context);
         super.encode(encoder, context);
         encoder.uint32(src).uint32(dst);
     }
-    public static override decode(decoder: IDecoder, context: ExpressionContext): TableCopyInstruction {
+    public static override decode(decoder: IDecoder, context: ExpressionDecodeContext): TableCopyInstruction {
         let src = decoder.uint32();
         if (!context.module.TableSection.Tables[src]) { throw new Error('Table Copy Instruction invalid source table reference'); }
         let dest = decoder.uint32();

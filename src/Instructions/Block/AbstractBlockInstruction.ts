@@ -3,7 +3,7 @@ import { protect } from '../../internal';
 import { GlobalVariableInstruction } from '../Variable';
 import { FunctionType, Type, ValueType } from '../../Types';
 import { ControlInstruction } from '../Control/ControlInstruction';
-import { ExpressionContext, Instruction, InstructionCtor } from '../Instruction';
+import { ExpressionEncodeContext, Instruction, InstructionCtor } from '../Instruction';
 import type { IDecoder, IEncoder } from '../../Encoding';
 import type * as Sections from '../../Sections';
 import type { AbstractBranchInstruction } from '../Branch';
@@ -56,7 +56,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         return -1;
     }
 
-    protected encodeOpen(encoder: IEncoder, context: ExpressionContext): void {
+    protected encodeOpen(encoder: IEncoder, context: ExpressionEncodeContext): void {
         super.encode(encoder, context);
         if (!this.Type) { encoder.uint8(EmptyBlock); }
         else if (this.Type instanceof FunctionType) {
@@ -66,14 +66,14 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         }
         else { encoder.uint8(this.Type); }
     }
-    protected encodeBlock(encoder: IEncoder, context: ExpressionContext): void {
+    protected encodeBlock(encoder: IEncoder, context: ExpressionEncodeContext): void {
         encoder.array(this.Block, context);
     }
-    protected encodeClose(encoder: IEncoder, _: ExpressionContext): void {
+    protected encodeClose(encoder: IEncoder, _: ExpressionEncodeContext): void {
         encoder.uint8(OpCodes.end);
     }
 
-    public override encode(encoder: IEncoder, context: ExpressionContext): void {
+    public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
         context.blocks.unshift(this);
         this.encodeOpen(encoder, context);
         this.encodeBlock(encoder, context);
@@ -81,7 +81,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         if (context.blocks.shift() !== this) { throw new Error('Unexpected block on the context stack'); }
     }
 
-    protected decodeType(decoder: IDecoder, context: ExpressionContext): BlockType {
+    protected decodeType(decoder: IDecoder, context: ExpressionEncodeContext): BlockType {
         let header = decoder.peek(), block;
         if (header === EmptyBlock) { block = null; decoder.uint8(); }
         else if (header in Type) { block = header; decoder.uint8(); }
@@ -94,7 +94,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         }
         return block;
     }
-    protected decodeBlock(decoder: IDecoder, context: ExpressionContext): Instruction[] {
+    protected decodeBlock(decoder: IDecoder, context: ExpressionEncodeContext): Instruction[] {
         let instructions = [];
         let c = decoder.peek();
         while (c != OpCodes.end && c != OpCodes.else) {
@@ -103,7 +103,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         }
         return instructions;
     }
-    public decode(decoder: IDecoder, context: ExpressionContext): void {
+    public decode(decoder: IDecoder, context: ExpressionEncodeContext): void {
         context.blocks.unshift(this);
         let type = this.decodeType(decoder, context);
         let block = this.decodeBlock(decoder, context);
@@ -117,7 +117,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
     public static override decode<O extends BlockInstructionCodes>(
         this: InstructionCtor<AbstractBlockInstruction<O>>,
         decoder: IDecoder,
-        context: ExpressionContext
+        context: ExpressionEncodeContext
     ): AbstractBlockInstruction<O> {
         let block = new this();
         block.decode(decoder, context);

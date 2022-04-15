@@ -3,7 +3,7 @@ import { protect } from '../../internal';
 import { AbstractBlockInstruction, BlockType } from './AbstractBlockInstruction';
 import * as Types from '../../Types';
 import type { IDecoder, IEncoder } from '../../Encoding';
-import type { ExpressionContext, Instruction, StackEdit } from '../Instruction';
+import type { ExpressionEncodeContext, Instruction, StackEdit } from '../Instruction';
 
 export class IfThenElseInstruction extends AbstractBlockInstruction<OpCodes.if> {
     public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [] ]; }
@@ -30,12 +30,12 @@ export class IfThenElseInstruction extends AbstractBlockInstruction<OpCodes.if> 
         return result;
     }
 
-    public override encodeBlock(encoder: IEncoder, context: ExpressionContext): void {
+    public override encodeBlock(encoder: IEncoder, context: ExpressionEncodeContext): void {
         super.encodeBlock(encoder, context)
         if (this.Else.length) { encoder.uint8(OpCodes.else).array(this.Else, context); }
     }
 
-    public override decode(decoder: IDecoder, context: ExpressionContext): void {
+    public override decode(decoder: IDecoder, context: ExpressionEncodeContext): void {
         context.blocks.unshift(this);
         let type = this.decodeType(decoder, context);
         let block = this.decodeBlock(decoder, context);

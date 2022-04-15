@@ -1,4 +1,4 @@
-import { Module } from '../Module';
+import { Module, WasmOptions } from '../Module';
 import { OpCodes } from '../OpCodes';
 import { protect } from '../internal';
 import { Instruction } from './Instruction';
@@ -10,7 +10,7 @@ import type { IDecoder, IEncodable, IEncoder } from '../Encoding';
 
 export type Passable<T extends boolean | undefined, R> = R | (T extends false | undefined ? never : null);
 
-export class Expression implements IEncodable<Module> {
+export class Expression implements IEncodable<[Module, WasmOptions]> {
 
     public readonly Instructions!: Instruction[];
     
@@ -38,9 +38,9 @@ export class Expression implements IEncodable<Module> {
         return r;
     }
 
-    public encode(encoder: IEncoder, context: Module): void {
+    public encode(encoder: IEncoder, context: Module, opts: WasmOptions): void {
         encoder
-            .array(this.Instructions, { module: context, blocks: [] })
+            .array(this.Instructions, { module: context, blocks: [], options: opts })
             .uint8(OpCodes.end);
     }
 
@@ -51,10 +51,10 @@ export class Expression implements IEncodable<Module> {
         return Instruction.resolveStack(this.Instructions, params, pass);
     }
     
-    public static decode(decoder: IDecoder, context: Module): Expression {
+    public static decode(decoder: IDecoder, mod: Module): Expression {
         let exp = new Expression();
         while (decoder.peek() != OpCodes.end) {
-            exp.Instructions.push(Instruction.decode(decoder, { module: context, blocks: [] }));
+            exp.Instructions.push(Instruction.decode(decoder, { module: mod, blocks: [] }));
         }
         decoder.uint8();
         return exp;

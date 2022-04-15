@@ -1,3 +1,5 @@
 export * from './AbstractCallInstruction'
 export * from './CallIndirectInstruction'
 export * from './CallInstruction'
+export * from './ReturnCallIndirectInstruction'
+export * from './ReturnCallInstruction'

@@ -42,6 +42,36 @@ export enum OpCodes {
      * `(if (then ...) (else ...))`
      */
     else                      = 0x05,
+    /** Begins a block which can handle thrown exceptions
+     * 
+     * ### #Exceptions
+     * 
+     * `(try $label (...))`
+     */
+    try                       = 0x06,
+    /** Begins the catch block of a try block
+     * 
+     * ### #Exceptions
+     * 
+     * `(cacth $tryLabel (...))`
+     */
+    catch                      = 0x07,
+    /** Creates an exception defined by the tag
+     * and then throws it.
+     * 
+     * ### #Exceptions
+     * 
+     * `(throw $exceptionTag)`
+     */
+    throw                       = 0x08,
+    /** Pops the `externref` on top of the stack
+     * and throws it
+     * 
+     * ### #Exceptions
+     * 
+     * `(rethrow $catchLabel)`
+     */
+    rethrow                     = 0x09,
     /** End a block or a function (omittiable in text format)
      * 
      * `(end)`
@@ -96,6 +126,49 @@ export enum OpCodes {
      * `[t1\*, i32] --> [t2\*]`
      */
     call_indirect             = 0x11,
+    
+    /** Call another function consuming the necessary arguments and returning the results.
+     * The function will be threated as a tail recursive.
+     * This instruction will combine the function call and a return instruction
+     * such that the compiler knows about the tail recursion.
+     * 
+     * ### #Tail call
+     * 
+     * `(return_call $function)`
+     * 
+     * `[t1\*] --> [t2\*]`
+     */
+    return_call              = 0x12,
+    /** Call another function consuming the necessary arguments and returning the results.
+     * The function is retrieved by indexing into a table.
+     * Since the table can contains `anyfunc` type (functions of any type), the callee is
+     * dynamically checked against the function type indexed by the instruction's second immediate,
+     * and the call is aborted with a trap (runtime error) if it does not match.
+     * The function will be threated as a tail recursive.
+     * This instruction will combine the function call and a return instruction
+     * such that the compiler knows about the tail recursion.
+     * 
+     * ### #Tail call
+     * 
+     * `(return_call_indirect $tableIndex (type $functionType))`
+     * 
+     * `[t1\*, i32] --> [t2\*]`
+     */
+    return_call_indirect     = 0x13,
+    /** Begins the delegate block of a try block
+     * 
+     * ### #Exceptions
+     * 
+     * `(delegate $tryLabel (...))`
+     */
+    delegate                  = 0x18,
+    /** Begins the catch_all block of a try block
+     * 
+     * ### #Exceptions
+     * 
+     * `(cacth_all (...))`
+     */
+     catch_all                = 0x19,
     /** Pop (or drop) an element from the stack
      * 
      * `(drop)`
@@ -1819,7 +1892,7 @@ export enum OpCodesExt1 {
     /** Copy data from a passive data segment into a memory.
      * (assumes memory 0 if omitted since there should be only one memory in WASM-v1)
      * 
-     * ### #Memory bulk instruction
+     * ### #Bulk Memory
      * 
      * `stack: [$dstAddress, $srcOffset, $sizeBytes] --> []`
      * 
@@ -1832,6 +1905,8 @@ export enum OpCodesExt1 {
      * The data section is still referenceable but any access
      * will cause a trap (runtime error - beside zero-length accesses)
      * 
+     * ### #Bulk Memory
+     * 
      * `(data.drop $data)`
      * 
      * `[] --> []`
@@ -1841,7 +1916,7 @@ export enum OpCodesExt1 {
      * The regions can also overlap. The source and destination memory can be the same.
      * (assumes memory 0 if omitted since there should be only one memory in WASM-v1).
      * 
-     * ### #Memory bulk instruction
+     * ### #Bulk Memory
      * 
      * `stack: [$dstAddress, $srcAddress, $regionSizeBytes] --> []`
      * 
@@ -1853,11 +1928,11 @@ export enum OpCodesExt1 {
     /** Fill the given region of a memory with the value present into the stack.
      * (assumes memory 0 if omitted since there should be only one memory in WASM-v1).
      * 
-     * ### #Memory bulk instruction
+     * ### #Bulk Memory
      * 
      * `stack: [$dstAddress, $value, $sizeBytes] --> []`
      * 
-     * `(memory.copy [$memory])`
+     * `(memory.fill [$memory])`
      * 
      * `[i32, i32, i32] --> []`
      */
@@ -1865,7 +1940,7 @@ export enum OpCodesExt1 {
     /** Copy data from a passive data segment into a table.
      * (assumes table 0 if omitted since there should be only one table in WASM-v1)
      * 
-     * ### #Memory bulk instruction
+     * ### #Bulk Memory
      * 
      * `stack: [$dstAddress, $srcOffset, $sizeBytes] --> []`
      * 
@@ -1877,6 +1952,8 @@ export enum OpCodesExt1 {
     /** Discard the data in an element segment.
      * (assumes table 0 if omitted since there should be only one table in WASM-v1)
      * 
+     * ### #Bulk Memory
+     * 
      * `(elem.drop $index [$table])`
      * 
      * `[] --> []`
@@ -1886,7 +1963,7 @@ export enum OpCodesExt1 {
      * The regions can also overlap. The source and destination tables can be the same.
      * (assumes table 0 if omitted since there should be only one table in WASM-v1)
      * 
-     * ### #Memory bulk instruction
+     * ### #Bulk Memory
      * 
      * `stack: [$dstIndex, $srcIndex, $indexSize] --> []`
      * 

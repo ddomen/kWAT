@@ -4,7 +4,7 @@ import { AbstractBranchInstruction } from './AbstractBranchInstruction';
 import * as Types from '../../Types';
 import type { AbstractBlockInstruction } from '../Block';
 import type { IDecoder, IEncoder } from '../../Encoding';
-import type { ExpressionContext, StackEdit } from '../Instruction';
+import type { ExpressionEncodeContext, StackEdit } from '../Instruction';
 
 export class BranchTableInstruction extends AbstractBranchInstruction<OpCodes.br_table> {
     public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [] ]; }
@@ -13,7 +13,7 @@ export class BranchTableInstruction extends AbstractBranchInstruction<OpCodes.br
         super(OpCodes.br_table, firstTarget);
         protect(this, 'Targets', targets.slice(), true);
     }
-    public override encode(encoder: IEncoder, _?: ExpressionContext): void {
+    public override encode(encoder: IEncoder, _?: ExpressionEncodeContext): void {
         let idxs = this.Targets.map(t => t.getLabel(this));
         let index = this.Target.getLabel(this);
         let targets = [ index, ...idxs ];
@@ -21,7 +21,7 @@ export class BranchTableInstruction extends AbstractBranchInstruction<OpCodes.br
             .vector(targets.slice(0, -1), 'uint32')
             .uint32(targets.slice(-1)[0]!);
     }
-    public static override decode(decoder: IDecoder, context: ExpressionContext): BranchTableInstruction {
+    public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): BranchTableInstruction {
         let bti = AbstractBranchInstruction.decode.call(this, decoder, context) as BranchTableInstruction;
         let labels = decoder.vector('uint32')
         labels.push(decoder.uint32());

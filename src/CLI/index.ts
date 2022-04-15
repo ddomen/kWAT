@@ -1,1 +1,1 @@
-export * from './cli'
+export class CLI {}

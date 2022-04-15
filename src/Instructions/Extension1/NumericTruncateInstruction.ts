@@ -2,7 +2,7 @@ import { protect } from '../../internal';
 import { OpCodes, OpCodesExt1 } from '../../OpCodes';
 import { AbstractNumericInstruction } from '../Numeric/AbstractNumericInstruction';
 import type { IEncoder } from '../../Encoding';
-import type { ExpressionContext } from '../Instruction';
+import type { ExpressionEncodeContext } from '../Instruction';
 
 export type NumericTruncateInstructionCodes =
     OpCodesExt1.i32_trunc_sat_f32_s | OpCodesExt1.i32_trunc_sat_f32_u |
@@ -12,7 +12,7 @@ export type NumericTruncateInstructionCodes =
 export abstract class NumericTruncateInstruction<O extends NumericTruncateInstructionCodes> extends AbstractNumericInstruction<OpCodes.op_extension_1> {
     public readonly OperationCode!: O;
     protected constructor(code: O) { super(OpCodes.op_extension_1); protect(this, 'OperationCode', code, true); }
-    public override encode(encoder: IEncoder, context: ExpressionContext): void {
+    public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
         super.encode(encoder, context);
         encoder.uint32(this.OperationCode)
     }

@@ -1,7 +1,7 @@
 import { protect } from '../internal';
 import { Expression } from '../Instructions';
 import { Section, SectionTypes } from './Section';
-import type { Module } from '../Module';
+import type { Module, WasmOptions } from '../Module';
 import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
 import type { FunctionType, ReferenceType, TableType } from '../Types';
 
@@ -69,7 +69,7 @@ export enum ElementKind {
 } 
 
 /** A section containing all element definitions for table initialization */
-export class ElementSegment implements IEncodable<Module> {
+export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
     /** The mode used by the segment */
     public Mode: ElementMode;
     /** The kind of stored memory */
@@ -173,7 +173,7 @@ export class ElementSegment implements IEncodable<Module> {
         return idx;
     }
 
-    public encode(encoder: IEncoder, mod: Module): void {
+    public encode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         if (this.Mode > ElementMode.MAX || this.Mode < 0) {
             throw new Error('Invalid Element Segment type [0x00, 0x07]: ' + this.Mode);
         }
@@ -184,7 +184,7 @@ export class ElementSegment implements IEncodable<Module> {
                 if (!this.Expression || !this.Functions.length) { throw new Error('Invalid ElementSegment[ActiveKind]'); }
                 idxs = this.getFunctionIndices(mod);
                 encoder
-                    .encode(this.Expression, mod)
+                    .encode(this.Expression, mod, opts)
                     .vector(idxs, 'uint32');
                 break;
             case ElementMode.DeclarativeKind:
@@ -200,7 +200,7 @@ export class ElementSegment implements IEncodable<Module> {
                 idxs = this.getFunctionIndices(mod);
                 encoder
                     .uint32(tid)
-                    .encode(this.Expression, mod)
+                    .encode(this.Expression, mod, opts)
                     .uint8(this.Kind)
                     .vector(idxs, 'uint32')
                 ;
@@ -212,25 +212,28 @@ export class ElementSegment implements IEncodable<Module> {
                 break;
             case ElementMode.ActiveType:
                 if (!this.Expression || !this.Initialization.length) { throw new Error('Invalid ElementSegment[ActiveType]'); }
-                encoder.encode(this.Expression, mod).vector(this.Initialization, mod);
+                encoder.encode(this.Expression, mod, opts)
+                        .vector(this.Initialization, mod, opts);
                 break;
             case ElementMode.DeclarativeType:
                 if (!this.Reference || !this.Initialization.length) { throw new Error('Invalid ElementSegment[DeclarativeType]'); }
-                encoder.uint8(this.Reference).vector(this.Initialization, mod);
+                encoder.uint8(this.Reference)
+                        .vector(this.Initialization, mod, opts);
                 break;
             case ElementMode.ActiveTypeTable:
                 if (!this.Table || !this.Expression || !this.Reference || !this.Initialization.length) { throw new Error('Invalid ElementSegment[ActiveTypeTable]'); }
                 tid = this.getTableIndex(mod);
                 encoder
                     .uint32(tid)
-                    .encode(this.Expression, mod)
+                    .encode(this.Expression, mod, opts)
                     .uint8(this.Reference)
-                    .vector(this.Initialization, mod)
+                    .vector(this.Initialization, mod, opts)
                 ;
                 break;
             case ElementMode.PassiveType:
                 if (!this.Reference || !this.Initialization.length) { throw new Error('Invalid ElementSegment[PassiveType]'); }
-                encoder.uint8(this.Reference).vector(this.Initialization, mod);
+                encoder.uint8(this.Reference)
+                        .vector(this.Initialization, mod, opts);
                 break;
             default: throw new Error('Invalid ElementSegment Type: ' + this.Mode)
         }
@@ -323,9 +326,9 @@ export class ElementSection extends Section<SectionTypes.element> {
         protect(this, 'Elements', [], true);
     }
 
-    public override contentEncode(encoder: IEncoder, mod: Module): void {
+    public override contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         if (!this.Elements.length) { return; }
-        encoder.vector(this.Elements, mod);
+        encoder.vector(this.Elements, mod, opts);
     }
 
     public decode(decoder: IDecoder, mod: Module): void {

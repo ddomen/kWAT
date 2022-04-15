@@ -26,6 +26,14 @@ export class MemorySection extends Section<SectionTypes.memory> {
         }
         return false;
     }
+    
+    /** Retrieve the index of a memory present in this section
+     * @param {Types.MemoryType} memory the memory to search
+     * @returns {number} the index of the variable, `-1` if not found
+     */
+    public indexOf(memory: Types.MemoryType): number {
+        return this.Memories.indexOf(memory);
+    }
 
     public override contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         if (!this.Memories.length) { return; }

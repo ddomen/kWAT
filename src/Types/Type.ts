@@ -82,43 +82,43 @@ export const MutableTypeKeys = MutableTypeValues.map(v => Type[v]! as MutableTyp
 
 /** Check if a value is of {@link NumberType} type
  * @param {*} target the value to be checked
- * @return {boolean} wether or not the value is of the given type
+ * @return {boolean} whether or not the value is of the given type
 */
 export function validNumber(target: any): target is NumberType { return typeof(target) === 'number' && NumberTypeValues.indexOf(target) >= 0; }
 /** Check if a value is of {@link ReferenceType} type
  * @param {*} target the value to be checked
- * @return {boolean} wether or not the value is of the given type
+ * @return {boolean} whether or not the value is of the given type
 */
 export function validReference(target: any): target is ReferenceType { return typeof(target) === 'number' && ReferenceTypeValues.indexOf(target) >= 0; }
 /** Check if a value is of {@link ValueType} type
  * @param {*} target the value to be checked
- * @return {boolean} wether or not the value is of the given type
+ * @return {boolean} whether or not the value is of the given type
 */
 export function validValue(target: any): target is ValueType { return typeof(target) === 'number' && ValueTypeValues.indexOf(target) >= 0; }
 /** Check if a value is of {@link MutableType} kind
  * @param {*} target the value to be checked
- * @return {boolean} wether or not the value is of the kind
+ * @return {boolean} whether or not the value is of the kind
 */
 export function validMutable(target: any): target is MutableType { return typeof(target) === 'number' && MutableTypeValues.indexOf(target) >= 0; }
 
 /** Check if a value is of {@link NumberType} keys 
  * @param {*} target the value to be checked
- * @return {boolean} wether or not the value is a key of the given type
+ * @return {boolean} whether or not the value is a key of the given type
 */
 export function validNumberKey(target: string): target is NumberTypeKey { return typeof(target) === 'string' && NumberTypeKeys.indexOf(target as any) >= 0; }
 /** Check if a value is of {@link ReferenceType} keys
  * @param {*} target the value to be checked
- * @return {boolean} wether or not the value is a key of the given type
+ * @return {boolean} whether or not the value is a key of the given type
 */
 export function validReferenceKey(target: string): target is ReferenceTypeKey { return typeof(target) === 'string' && ReferenceTypeKeys.indexOf(target as any) >= 0; }
 /** Check if a value is of {@link ValueType} keys
  * @param {*} target the value to be checked
- * @return {boolean} wether or not the value is a key of the given type
+ * @return {boolean} whether or not the value is a key of the given type
 */
 export function validValueKey(target: string): target is ValueTypeKey { return typeof(target) === 'string' && ValueTypeKeys.indexOf(target as any) >= 0; }
 /** Check if a value is of {@link MutableType} kind keys
  * @param {*} target the value to be checked
- * @return {boolean} wether or not the value is a key of the given kind
+ * @return {boolean} whether or not the value is a key of the given kind
 */
 export function validMutableKey(target: string): target is MutableTypeKey { return typeof(target) === 'string' && MutableTypeKeys.indexOf(target as any) >= 0; }
 

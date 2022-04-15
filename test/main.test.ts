@@ -3,7 +3,7 @@ import * as WAC from '../dist'
 import * as JU from './jutils'
 
 describe('Encoder Test', () => {
-    const encoder = new WAC.Structure.Encoder();
+    const encoder = new WAC.Encoding.Encoder();
     const reset = () => (encoder as any)._data = [];
 
     it('supports uint8', () => {
@@ -21,7 +21,7 @@ describe('Encoder Test', () => {
         let v = new DataView(new ArrayBuffer(4)), b: Uint8Array;
         for (let i = 0; i < 0xffffffff; i += 4295) {
             v.setUint32(0, i, true);
-            encoder.uint32(i, true);
+            encoder.uint32(i, WAC.Encoding.Relaxations.None);
             b = encoder.getBuffer()
             expect(b).withContext('value: ' + i).toEqual(new Uint8Array(v.buffer));
             reset();
@@ -34,7 +34,7 @@ describe('Encoder Test', () => {
             const s = BigInt('0x4189374bc6a5c8');
             for (let i = BigInt(0); i < m; i += s) {
                 v.setBigUint64(0, i, true);
-                encoder.uint64(i, true);
+                encoder.uint64(i, WAC.Encoding.Relaxations.None);
                 b = encoder.getBuffer()
                 expect(b).withContext('value: ' + i).toEqual(new Uint8Array(v.buffer));
                 reset();
@@ -78,7 +78,7 @@ describe('Expression Test', () => {
 
 
     it('has instance if no constructor parameter', () => {
-        WAC.Structure.Expression.AllInstructionsTypes.forEach(e =>
+        WAC.Instructions.Instruction.AllInstructionTypes.forEach(e =>
             expect(
                 JU.countParams(e) == 0 ?
                 !!(e as any).instance : 

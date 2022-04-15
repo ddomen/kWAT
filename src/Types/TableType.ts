@@ -35,9 +35,9 @@ import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
         encoder.uint8(this.Reference).encode(this.Limits);
     }
 
-    /** Check wether a value represents the same table definition 
+    /** Check whether a value represents the same table definition 
      * @param {*} other the value to be checked
-     * @returns {boolean} wether the other value represents the same table definition
+     * @returns {boolean} whether the other value represents the same table definition
      */
     public equals(other: any): boolean {
         return this === other || (

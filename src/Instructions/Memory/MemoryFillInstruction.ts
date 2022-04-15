@@ -2,7 +2,7 @@ import { Type } from '../../Types';
 import { protect } from '../../internal';
 import { OpCodes, OpCodesExt1 } from '../../OpCodes';
 import { AbstractMemoryInstruction } from './AbstractMemoryInstruction';
-import type { ExpressionContext, StackEdit } from '../Instruction';
+import type { ExpressionEncodeContext, StackEdit } from '../Instruction';
 import type { IEncoder } from '../../Encoding';
 
 export class MemoryFillInstruction extends AbstractMemoryInstruction<OpCodes.op_extension_1> {
@@ -12,7 +12,8 @@ export class MemoryFillInstruction extends AbstractMemoryInstruction<OpCodes.op_
         super(OpCodes.op_extension_1);
         protect(this, 'OperationCode', OpCodesExt1.memory_fill, true);
     }
-    public override encode(encoder: IEncoder, context: ExpressionContext): void {
+    public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
+        if (!context.options.bulkMemory) { throw new Error('Bulk memory instruction detected'); }
         super.encode(encoder, context);
         encoder.uint32(this.OperationCode).uint8(0x00);
     }

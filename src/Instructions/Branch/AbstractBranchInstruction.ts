@@ -1,4 +1,4 @@
-import { ExpressionContext, Instruction, InstructionCtor } from '../Instruction';
+import { ExpressionEncodeContext, Instruction, InstructionCtor } from '../Instruction';
 import type { OpCodes } from '../../OpCodes';
 import type { IDecoder, IEncoder } from '../../Encoding';
 import type { AbstractBlockInstruction } from '../Block';
@@ -10,7 +10,7 @@ export abstract class AbstractBranchInstruction<O extends BranchInstructionCodes
         super(code);
         this.Target = target;
     }
-    public override encode(encoder: IEncoder, context: ExpressionContext): void {
+    public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
         let index = this.Target.getLabel(this);
         super.encode(encoder, context);
         encoder.uint32(index);
@@ -18,7 +18,7 @@ export abstract class AbstractBranchInstruction<O extends BranchInstructionCodes
     public static override decode(
         this: InstructionCtor<AbstractBranchInstruction, [ AbstractBlockInstruction ]>,
         decoder: IDecoder,
-        context: ExpressionContext
+        context: ExpressionEncodeContext
     ): AbstractBranchInstruction {
         super.decode(decoder, context);
         let label = decoder.uint32();

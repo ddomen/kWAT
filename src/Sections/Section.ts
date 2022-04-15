@@ -7,38 +7,38 @@ import type { IEncoder, IDecoder, IEncodable, IDecodable } from '../Encoding';
 */
 export enum SectionTypes {
     /** {@link CustomSection} */
-    custom           = 0x0,
+    custom           = 0x00,
     /** {@link TypeSection} */
-    type             = 0x1,
+    type             = 0x01,
     /** {@link ImportSection} */
-    import           = 0x2,
+    import           = 0x02,
     /** {@link FunctionSection} */
-    function         = 0x3,
+    function         = 0x03,
     /** {@link TableSection} */
-    table            = 0x4,
+    table            = 0x04,
     /** {@link MemorySection} */
-    memory           = 0x5,
+    memory           = 0x05,
     /** {@link GlobalSection} */
-    global           = 0x6,
+    global           = 0x06,
     /** {@link ExportSection} */
-    export           = 0x7,
+    export           = 0x07,
     /** {@link StartSection} */
-    start            = 0x8,
+    start            = 0x08,
     /** {@link ElementSection} */
-    element          = 0x9,
+    element          = 0x09,
     /** {@link CodeSection} */
-    code             = 0xa,
+    code             = 0x0a,
     /** {@link DataSection} */
-    data             = 0xb,
+    data             = 0x0b,
     /** {@link DataCountSection} */
-    dataCount        = 0xc,
+    dataCount        = 0x0c
 }
 
 /** An abstract class defining the common behaviours of a section,
  * their precedence and how they encode to a buffer.
  */
 export abstract class Section<S extends SectionTypes=SectionTypes>
-    implements IEncodable<[Module, WasmOptions]>, IDecodable<void> {
+    implements IEncodable<[Module, WasmOptions]>, IDecodable<void, [Module, WasmOptions]> {
 
     /** The precedence of this section (used in physical encoding) */
     protected _precedence!: number;

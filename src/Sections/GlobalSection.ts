@@ -2,11 +2,11 @@ import { protect } from '../internal';
 import { Section, SectionTypes } from './Section';
 import { Expression } from '../Instructions';
 import { GlobalType, ValueType } from '../Types';
-import type { Module } from '../Module';
+import type { Module, WasmOptions } from '../Module';
 import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
 
 /** A global variable definition, part of a {@link GlobalSection} */
-export class GlobalVariable implements IEncodable<Module> {
+export class GlobalVariable implements IEncodable<[Module, WasmOptions]> {
     /** The variable type description */
     public readonly Variable!: GlobalType;
     /** The expression which initialize the global variable */
@@ -14,7 +14,7 @@ export class GlobalVariable implements IEncodable<Module> {
     /** A reference name for the current variable */
     public Reference: string;
 
-    /** Wether this variable is a reference to an external variable */
+    /** whether this variable is a reference to an external variable */
     public get isReference(): boolean { return this.Variable === -1 as any && !!this.Reference && !this.Initialization; }
 
     /** Creates a new global variable
@@ -31,7 +31,7 @@ export class GlobalVariable implements IEncodable<Module> {
 
     /** Check if this variable is currently the target of reference of another value.
      * @param {(GlobalVariable|string)} other the reference value to check
-     * @return {boolean} wether the other value is the target of reference of the current variable
+     * @return {boolean} whether the other value is the target of reference of the current variable
     */
     public referred(other: GlobalVariable | string): boolean {
         if (other instanceof GlobalVariable) { return other.isReference && this.Reference === other.Reference; }
@@ -39,14 +39,14 @@ export class GlobalVariable implements IEncodable<Module> {
     }
     /** Check if this variable currently refer the same as another variable 
      * @param {(GlobalVariable|string)} other the referenced value
-     * @returns {boolean} wether this variable refer the other value
+     * @returns {boolean} whether this variable refer the other value
      */
     public refer(other: GlobalVariable | string): boolean {
         return this.isReference && (other instanceof GlobalVariable ? other.Reference : other) === other;
     }
 
-    public encode(encoder: IEncoder, mod: Module) {
-        encoder.encode(this.Variable).encode(this.Initialization, mod);
+    public encode(encoder: IEncoder, mod: Module, opts: WasmOptions) {
+        encoder.encode(this.Variable, opts).encode(this.Initialization, mod, opts);
     }
     
     /**Decode this object through a decoder
@@ -84,7 +84,7 @@ export class GlobalSection extends Section<SectionTypes.global> {
         protect(this, 'Globals', [], true);
     }
 
-    /** Retrieve the index of a global variablle present in this section
+    /** Retrieve the index of a global variable present in this section
      * also by checking the reference equality
      * @param {GlobalVariable} variable the variable to search
      * @returns {number} the index of the variable, `-1` if not found
@@ -108,9 +108,9 @@ export class GlobalSection extends Section<SectionTypes.global> {
         return false;
     }
     
-    public override contentEncode(encoder: IEncoder, mod: Module): void {
+    public override contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         if (!this.Globals.length) { return; }
-        encoder.vector(this.Globals, mod);
+        encoder.vector(this.Globals, mod, opts);
     }
 
 

@@ -28,10 +28,10 @@ export class LimitType implements IEncodable {
         else { encoder.uint8(0x00).uint32(this.Min); }
     }
 
-    /** Check wether another value describes the same limit
+    /** Check whether another value describes the same limit
      * of the current object.
      * @param {*} other the value to be checked
-     * @return {boolean} wether two values describe the same limit
+     * @return {boolean} whether two values describe the same limit
      */
     public equals(other: any): boolean {
         return this === other || (

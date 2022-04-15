@@ -155,12 +155,24 @@ export class ImportSection extends Section<SectionTypes.import> {
         protect(this, 'Imports', [], true);
     }
 
-    /** Retrieve the index of a function declaration imported in this section
-     * @param {Types.FunctionType} target the variable to search
-     * @returns {number} the index of the function declaration, `-1` if not found
+    /** Retrieve the index of a declaration imported in this section
+     * @param {ImportDescription} target the variable to search
+     * @returns {number} the index of the declaration, `-1` if not found
      */
-    public indexOf(target: Types.FunctionType): number {
-        return this.Imports.findIndex(i => i.isFunction() && i.Description.equals(target))
+    public indexOf(target: ImportDescription): number {
+        if (target instanceof Types.FunctionType) {
+            return this.Imports.findIndex(i => i.isFunction() && i.Description.equals(target));
+        }
+        else if (target instanceof Types.MemoryType) {
+            return this.Imports.findIndex(i => i.isMemory() && i.Description.equals(target));
+        }
+        else if (target instanceof Types.TableType) {
+            return this.Imports.findIndex(i => i.isTable() && i.Description.equals(target));
+        }
+        else if (target instanceof Types.GlobalType) {
+            return this.Imports.findIndex(i => i.isGlobal() && i.Description.equals(target));
+        }
+        return -1;
     }
 
     protected contentEncode(encoder: IEncoder, mod: Module): void {

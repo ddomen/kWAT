@@ -9,3 +9,5 @@ export * as Types from './Types'
 export * as Sections from './Sections'
 export * as Instructions from './Instructions'
 export * as Builder from './Builder'
+
+export * as kwat from './kwat';
