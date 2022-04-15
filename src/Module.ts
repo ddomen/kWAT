@@ -209,7 +209,7 @@ export class Module implements IEncodable<WasmOptions> {
     /** Encode this module through an encoder
      * @param {IEncoder} encoder the encoder target of the writing
      * @param {WasmOptions} [options] the options used to write the module to the encoder
-     * @return nothing
+     * @return {void} nothing
      */
     public encode(encoder: IEncoder, options?: Partial<WasmOptions>): void {
         options = Object.assign({}, DefaultOptions, options)
@@ -228,7 +228,7 @@ export class Module implements IEncodable<WasmOptions> {
 
     /** Reads and decodes a module from a decoder
      * @param {IDecoder} decoder the target decoder
-     * @return the read module
+     * @return {Module} the read module
     */
     public static decode(decoder: IDecoder): Module {
         if (decoder.uint32(Relaxations.None) !== ModuleMagic) {
@@ -264,7 +264,7 @@ export class Module implements IEncodable<WasmOptions> {
     /** Create a builder that make it easy to fill the current module
      * @param {BuildingCallback<ModuleBuilder>} builder
      *      a callback describing the steps of the module building
-     * @return the built module
+     * @return {Module} the built module
     */
     public static build(builder: BuildingCallback<ModuleBuilder>): Module {
         return builder(new ModuleBuilder()).build();
