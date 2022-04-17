@@ -16,6 +16,7 @@ export type Passable<T extends boolean | undefined, R> = R | (T extends false | 
 /** A class representing a list of instructions which can be encoded */
 export class Expression implements IEncodable<[Module, WasmOptions]> {
 
+    /** The set of the instructions holded by this expression */
     public readonly Instructions!: Instruction[];
     
     /** Create and fill an expression of instructions
