@@ -24,7 +24,7 @@ export interface IDecoder {
     /** The current number of bytes remaining to read from the buffer */
     get remaining(): number;
     /** The current number of bytes readed */
-    get offset(): number;
+    offset: number;
     /** Express the default relaxation of the decoder */
     relaxation: Relaxation;
     /** Read a byte from the buffer without moving the offset
@@ -167,6 +167,10 @@ export class Decoder implements IDecoder {
     public get size(): number { return this._view.byteLength; }
     public get remaining(): number { return this._view.byteLength - this._offset; }
     public get offset(): number { return this._offset; }
+    public set offset(value: number) {
+        if (value < 0 || value >= this._view.byteLength) { throw new Error('Offset out of range'); }
+        this._offset = value;
+    }
     public relaxation: Relaxation = Relaxations.Canonical;
     public constructor(buffer: ArrayBuffer, offset?: number, bytes?: number) { this._view = new DataView(buffer, offset, bytes); this._offset = 0; }
 

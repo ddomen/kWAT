@@ -103,7 +103,7 @@ export class FunctionBuilder implements IBuilder<FunctionDefinition> {
      */
     public hasLocal(index: number | string): boolean {
         if (typeof(index) === 'string') { return index in this._locals; }
-        return index >= 0 && index < Object.keys(this._locals).length;
+        return index >= 0 && index < Object.keys(this._locals).length + this._parameters.length;
     }
 
     /** Check if the function has the given index in the local variable set ,

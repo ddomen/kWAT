@@ -1,1 +1,2 @@
-export * from './Dumper'
+export * from './dump'
+export * from './Reader'
