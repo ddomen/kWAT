@@ -1,5 +1,6 @@
-import { Instruction } from '../Instruction';
+import { ExpressionEncodeContext, Instruction } from '../Instruction';
 import type { OpCodes } from '../../OpCodes';
+import type { MemoryType } from '../../Types';
 
 export type MemoryInstructionCodes =
                 OpCodes.i32_load | OpCodes.i64_load | OpCodes.f32_load | OpCodes.f64_load |
@@ -12,4 +13,17 @@ export type MemoryInstructionCodes =
                 OpCodes.i64_store32 | OpCodes.memory_size | OpCodes.memory_grow |
                 OpCodes.op_extension_1;
 
-export abstract class AbstractMemoryInstruction<O extends MemoryInstructionCodes> extends Instruction<O> { }
+export abstract class AbstractMemoryInstruction<O extends MemoryInstructionCodes> extends Instruction<O> {
+
+    protected _memoryIndex(memory: MemoryType | null, context: ExpressionEncodeContext): number {
+        let mem = 0;
+        if (memory) {
+            mem = context.module.MemorySection.indexOf(memory);
+            if (mem === -1) { mem = context.module.ImportSection.indexOf(memory)}
+            if (mem === -1) { throw new Error('Memory index not found: ' + memory); }
+        }
+        if (mem && !context.options.multipleMemory) { throw new Error('Multiple memory detected'); }
+        return mem;
+    }
+
+}

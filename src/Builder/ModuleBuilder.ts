@@ -191,6 +191,34 @@ export class ModuleBuilder implements IBuilder<Module> {
         return this;
     }
 
+    /** Retrieve the memory by its local name or index
+     * @param {(number|string)} index the memory local name or index
+     * @return {(MemoryType|null)} the retrieved memory, if found
+     */
+     public getMemory(index: number | string | MemoryType): MemoryType | null {
+        if (typeof(index) === 'object') {
+            return index instanceof MemoryType &&
+                (Object.values(this._imports).filter(x => x instanceof MemoryType) as MemoryType[])
+                    .concat(Object.values(this._memories))
+                    .indexOf(index) !== -1 ? index : null;
+        }
+        if (typeof(index) === 'number') {
+            if (index < 0) { return null; }
+            let mems: MemoryType[] = Object.values(this._imports).filter(x => x instanceof MemoryType) as MemoryType[];
+            if (index < mems.length) { return mems[index]!; }
+            index -= mems.length;
+            mems = Object.values(this._memories);
+            if (index < mems.length) { return mems[index]!; }
+            return null;
+        }
+        if (index in this._imports) {
+            return this._imports[index]! instanceof MemoryType ?
+                    this._imports[index]! as MemoryType :
+                    null;
+        }
+        return this._memories[index] || null;
+     }
+
     /** Retrieve the default (first) memory
      * @return {(MemoryType|null)} the retrieved memory, if found
      */

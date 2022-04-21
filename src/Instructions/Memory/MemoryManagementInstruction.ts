@@ -14,7 +14,7 @@ export type MemoryStoreInstructionCodes =
                 OpCodes.i32_store8 | OpCodes.i32_store16 | OpCodes.i64_store8 | OpCodes.i64_store16 |
                 OpCodes.i64_store32;
 export type MemoryManagementInstructionCodes = MemoryLoadInstructionCodes | MemoryStoreInstructionCodes |
-                OpCodes.op_extension_1 | OpCodes.memory_grow;
+                OpCodes.op_extension_1 | OpCodes.memory_grow | OpCodes.memory_size;
 
 export abstract class MemoryManagementInstruction<O extends MemoryManagementInstructionCodes>
     extends AbstractMemoryInstruction<O> {
@@ -28,16 +28,7 @@ export abstract class MemoryManagementInstruction<O extends MemoryManagementInst
     protected encodeCode(encoder: IEncoder, context: ExpressionEncodeContext): void { super.encode(encoder, context); }
     protected encodeAlign(encoder: IEncoder, _: ExpressionEncodeContext): void { encoder.uint32(this.Align); }
     protected encodeContent(_: IEncoder, __: ExpressionEncodeContext): void { }
-    protected encodeMemory(encoder: IEncoder, context: ExpressionEncodeContext): void {
-        let mem = 0;
-        if (this.Memory) {
-            mem = context.module.MemorySection.indexOf(this.Memory);
-            if (mem === -1) { mem = context.module.ImportSection.indexOf(this.Memory)}
-            if (mem === -1) { throw new Error('Memory index not found: ' + this.Memory); }
-        }
-        if (mem && !context.options.multipleMemory) { throw new Error('Multiple memory detected'); }
-        encoder.uint32(mem);
-    }
+    protected encodeMemory(encoder: IEncoder, context: ExpressionEncodeContext): void { encoder.uint32(this._memoryIndex(this.Memory, context)); }
 
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
         this.encodeCode(encoder, context);

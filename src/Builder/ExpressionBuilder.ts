@@ -2,6 +2,7 @@ import * as Types from '../Types';
 import * as Sections from '../Sections';
 import * as Instructions from '../Instructions';
 import type { OpCodes } from '../OpCodes';
+import type { MemoryType } from '../Types';
 import type { FunctionBuilder } from './FunctionBuilder';
 import type { BuildingCallback, IBuilder } from './index';
 
@@ -12,8 +13,10 @@ type Floats = Types.Type.f32 | Types.Type.f64;
 type FloatsKeys = Types.TypesKey<Floats>;
 type Step = Instructions.Instruction;
 
-type NativeTypes = 'i8' | 'int8' | 'i16' | 'int16' | 'i32' | 'int32' | 'i64' | 'int64' |
+type MemoryRWTypes = 'i8' | 'int8' | 'i16' | 'int16' | 'i32' | 'int32' | 'i64' | 'int64' |
                    'u8' | 'uint8' | 'u16' | 'uint16' | 'u32' | 'uint32' | 'u64' | 'uint64' |
+                   'l8' | 'long8' | 'l16' | 'long16' | 'l32' | 'long32' |
+                   'ul8' | 'ulong8' | 'ul16' | 'ulong16' | 'ul32' | 'ulong32' |
                    'byte' | 'short' | 'int' | 'long' |
                    'sbyte' | 'ushort' | 'uint' | 'ulong' |
                    'f32' | 'float32' | 'single' | 'f64' | 'float64' | 'double';
@@ -410,18 +413,28 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
      */
     public setGlobal(name: string): this { return this.addInstruction(new Instructions.GlobalSetInstruction(Sections.GlobalVariable.refer(name))); }
 
+    private _selectMemory(memory: string | number | undefined | MemoryType): MemoryType | undefined {
+        return typeof(memory) !== 'undefined' ? (this._function.module.getMemory(memory) || undefined) : undefined;
+    }
+
     /**Load into the stack the element at the memory index by reading a value of the given type.
      * Reads n consecutives bytes from the given index as a number of the given type, where n is the size of the type.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public load(type: Types.NumberType | Types.NumberTypeKey | NativeTypes, memory?: string): this {
+    public load(type: Types.NumberType | Types.NumberTypeKey | MemoryRWTypes, memory?: string): this {
         switch (type) {
             case 'i8': case 'int8': case 'sbyte': return this.load8AsInt32(memory);
             case 'u8': case 'uint8': case 'byte': return this.load8AsUInt32(memory);
             case 'i16': case 'int16': case 'short': return this.load16AsInt32(memory);
             case 'u16': case 'uint16': case 'ushort': return this.load16AsUInt32(memory);
+            case 'l8': case 'long8': return this.load8AsInt64(memory);
+            case 'ul8': case 'ulong8': return this.load8AsUInt64(memory);
+            case 'l16': case 'long16': return this.load16AsInt64(memory);
+            case 'ul16': case 'ulong16': return this.load16AsUInt64(memory);
+            case 'l32': case 'long32': return this.load32AsInt64(memory);
+            case 'ul32': case 'ulong32': return this.load32AsUInt64(memory);
             case Types.Type.i32: case 'i32': case 'int32': case 'uint32': case 'int': case 'uint': return this.loadInt32(memory);
             case Types.Type.i64: case 'i64': case 'int64': case 'uint64': case 'long': case 'ulong': return this.loadInt64(memory);
             case Types.Type.f32: case 'f32': case 'float32': case 'single': return this.loadFloat32(memory);
@@ -429,124 +442,250 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
             default: throw new Error('Unrecognized type: ' + type);
         }
     }
+
     /**Load into the stack the element at the memory index.
      * Reads 4 consecutives bytes from the given index as a (signed) i32.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public loadInt32(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.I32LoadInstruction.instance); }
+    public loadInt32(memory?: string): this { return this.addInstruction(new Instructions.I32LoadInstruction(this._selectMemory(memory))); }
     /**Load into the stack the element at the memory index.
      * Reads 8 consecutives bytes from the given index as a (signed) i64.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */   
-    public loadInt64(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.I64LoadInstruction.instance); }
+    public loadInt64(memory?: string): this { return this.addInstruction(new Instructions.I64LoadInstruction(this._selectMemory(memory))); }
     /**Load into the stack the element at the memory index.
      * Reads 1 byte from the given index as a (signed) i32.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public load8AsInt32(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.I32Load8SignedLoadInstruction.instance); }
+    public load8AsInt32(memory?: string): this { return this.addInstruction(new Instructions.I32Load8SignedLoadInstruction(this._selectMemory(memory))); }
     /**Load into the stack the element at the memory index.
      * Reads 1 byte from the given index as a (unsigned) i32.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public load8AsUInt32(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.I32Load8UnsignedLoadInstruction.instance); }
+    public load8AsUInt32(memory?: string): this { return this.addInstruction(new Instructions.I32Load8UnsignedLoadInstruction(this._selectMemory(memory))); }
     /**Load into the stack the element at the memory index.
      * Reads 2 consecutives bytes from the given index as a (signed) i32.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public load16AsInt32(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.I32Load16SignedLoadInstruction.instance); }
+    public load16AsInt32(memory?: string): this { return this.addInstruction(new Instructions.I32Load16SignedLoadInstruction(this._selectMemory(memory))); }
     /**Load into the stack the element at the memory index.
      * Reads 2 consecutives bytes from the given index as a (unsigned) i32.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public load16AsUInt32(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.I32Load16UnsignedLoadInstruction.instance); }
+    public load16AsUInt32(memory?: string): this { return this.addInstruction(new Instructions.I32Load16UnsignedLoadInstruction(this._selectMemory(memory))); }
     /**Load into the stack the element at the memory index.
      * Reads 1 byte from the given index as a (signed) i64.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public load8AsInt64(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.I64Load8SignedLoadInstruction.instance); }
+    public load8AsInt64(memory?: string): this { return this.addInstruction(new Instructions.I64Load8SignedLoadInstruction(this._selectMemory(memory))); }
     /**Load into the stack the element at the memory index.
      * Reads 1 byte from the given index as a (unsigned) i64.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public load8AsUInt64(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.I64Load8UnsignedLoadInstruction.instance); }
+    public load8AsUInt64(memory?: string): this { return this.addInstruction(new Instructions.I64Load8UnsignedLoadInstruction(this._selectMemory(memory))); }
     /**Load into the stack the element at the memory index.
      * Reads 2 consecutive bytes from the given index as a (signed) i64.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public load16AsInt64(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.I64Load16SignedLoadInstruction.instance); }
+    public load16AsInt64(memory?: string): this { return this.addInstruction(new Instructions.I64Load16SignedLoadInstruction(this._selectMemory(memory))); }
     /**Load into the stack the element at the memory index.
      * Reads 2 consecutive bytes from the given index as a (unsigned) i64.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public load16AsUInt64(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.I64Load16UnsignedLoadInstruction.instance); }
+    public load16AsUInt64(memory?: string): this { return this.addInstruction(new Instructions.I64Load16UnsignedLoadInstruction(this._selectMemory(memory))); }
     /**Load into the stack the element at the memory index.
      * Reads 4 consecutive bytes from the given index as a (signed) i64.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public load32AsInt64(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.I64Load32SignedLoadInstruction.instance); }
+    public load32AsInt64(memory?: string): this { return this.addInstruction(new Instructions.I64Load32SignedLoadInstruction(this._selectMemory(memory))); }
     /**Load into the stack the element at the memory index.
      * Reads 4 consecutive bytes from the given index as a (unsigned) i64.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public load32AsUInt64(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.I64Load32UnsignedLoadInstruction.instance); }
+    public load32AsUInt64(memory?: string): this { return this.addInstruction(new Instructions.I64Load32UnsignedLoadInstruction(this._selectMemory(memory))); }
     /**Load into the stack the element at the memory index.
      * Reads 4 consecutive bytes from the given index as a f32.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public loadFloat32(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.F32LoadInstruction.instance); }
+    public loadFloat32(memory?: string): this { return this.addInstruction(new Instructions.F32LoadInstruction(this._selectMemory(memory))); }
         /**Load into the stack the element at the memory index.
      * Reads 4 consecutive bytes from the given index as a f64.
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public loadFloat64(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.F64LoadInstruction.instance); }
+    public loadFloat64(memory?: string): this { return this.addInstruction(new Instructions.F64LoadInstruction(this._selectMemory(memory))); }
+
+    /**Store into the memory at the index the value in the stack, considering it of the given type.
+     * Reads n consecutives bytes from the given index as a number of the given type, where n is the size of the type.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */
+    public store(type: Types.NumberType | Types.NumberTypeKey | MemoryRWTypes, memory?: string): this {
+        switch (type) {
+            case 'i8': case 'int8': case 'sbyte': return this.store8AsInt32(memory);
+            case 'u8': case 'uint8': case 'byte': return this.store8AsUInt32(memory);
+            case 'i16': case 'int16': case 'short': return this.store16AsInt32(memory);
+            case 'u16': case 'uint16': case 'ushort': return this.store16AsUInt32(memory);
+            case 'l8': case 'long8': return this.store8AsInt64(memory);
+            case 'ul8': case 'ulong8': return this.store8AsUInt64(memory);
+            case 'l16': case 'long16': return this.store16AsInt64(memory);
+            case 'ul16': case 'ulong16': return this.store16AsUInt64(memory);
+            case 'l32': case 'long32': return this.store32AsInt64(memory);
+            case 'ul32': case 'ulong32': return this.store32AsUInt64(memory);
+            case Types.Type.i32: case 'i32': case 'int32': case 'uint32': case 'int': case 'uint': return this.storeInt32(memory);
+            case Types.Type.i64: case 'i64': case 'int64': case 'uint64': case 'long': case 'ulong': return this.storeInt64(memory);
+            case Types.Type.f32: case 'f32': case 'float32': case 'single': return this.storeFloat32(memory);
+            case Types.Type.f64: case 'f64': case 'float64': case 'double': return this.storeFloat64(memory);
+            default: throw new Error('Unrecognized type: ' + type);
+        }
+    }
+
+    /**Store into the memory at a given index the value on the stack.
+     * Writes 4 consecutives bytes as a (signed) i32.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */
+    public storeInt32(memory?: string): this { return this.addInstruction(new Instructions.I32StoreInstruction(this._selectMemory(memory))); }
+    /**Store into the memory at a given index the value on the stack.
+     * Wirtes 8 consecutives bytes as a (signed) i64.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */   
+    public storeInt64(memory?: string): this { return this.addInstruction(new Instructions.I64StoreInstruction(this._selectMemory(memory))); }
+    /**Store into the memory at a given index the value on the stack.
+     * Writes 1 byte from the given index as a (signed) i32.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */
+    public store8AsInt32(memory?: string): this { return this.addInstruction(new Instructions.I32Store8Instruction(this._selectMemory(memory))); }
+    /**Store into the memory at a given index the value on the stack.
+     * Writes 1 byte as a (unsigned) i32.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */
+    public store8AsUInt32(memory?: string): this { return this.addInstruction(new Instructions.I32Store8Instruction(this._selectMemory(memory))); }
+    /**Store into the memory at a given index the value on the stack.
+     * Writes 2 consecutives bytes as a (signed) i32.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */
+    public store16AsInt32(memory?: string): this { return this.addInstruction(new Instructions.I32Store16Instruction(this._selectMemory(memory))); }
+    /**Store into the memory at a given index the value on the stack.
+     * Writes 2 consecutives bytes as a (unsigned) i32.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */
+    public store16AsUInt32(memory?: string): this { return this.addInstruction(new Instructions.I32Store16Instruction(this._selectMemory(memory))); }
+    /**Store into the memory at a given index the value on the stack.
+     * Writes 1 byte as a (signed) i64.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */
+    public store8AsInt64(memory?: string): this { return this.addInstruction(new Instructions.I64Store8Instruction(this._selectMemory(memory))); }
+    /**Store into the memory at a given index the value on the stack.
+     * Writes 1 byte as a (unsigned) i64.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */
+    public store8AsUInt64(memory?: string): this { return this.addInstruction(new Instructions.I64Store8Instruction(this._selectMemory(memory))); }
+    /**Store into the memory at a given index the value on the stack.
+     * Writes 2 consecutive bytes as a (signed) i64.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */
+    public store16AsInt64(memory?: string): this { return this.addInstruction(new Instructions.I64Store16Instruction(this._selectMemory(memory))); }
+    /**Store into the memory at a given index the value on the stack.
+     * Writes 2 consecutive bytes as a (unsigned) i64.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */
+    public store16AsUInt64(memory?: string): this { return this.addInstruction(new Instructions.I64Store16Instruction(this._selectMemory(memory))); }
+    /**Store into the memory at a given index the value on the stack.
+     * Writes 4 consecutive bytes as a (signed) i64.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */
+    public store32AsInt64(memory?: string): this { return this.addInstruction(new Instructions.I64Store32Instruction(this._selectMemory(memory))); }
+    /**Store into the memory at a given index the value on the stack.
+     * Writes 4 consecutive bytes as a (unsigned) i64.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */
+    public store32AsUInt64(memory?: string): this { return this.addInstruction(new Instructions.I64Store32Instruction(this._selectMemory(memory))); }
+    /**Store into the memory at a given index the value on the stack.
+     * Writes 4 consecutive bytes as a f32.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */
+    public storeFloat32(memory?: string): this { return this.addInstruction(new Instructions.F32StoreInstruction(this._selectMemory(memory))); }
+    /**Store into the memory at a given index the value on the stack.
+     * Writes 8 consecutive bytes as a f64.
+     * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
+     * @param {string} [memory] the target memory
+     * @return {this} the builder itself (chainable method)
+     */
+    public storeFloat64(memory?: string): this { return this.addInstruction(new Instructions.F64StoreInstruction(this._selectMemory(memory))); }
 
     /**Pushes on the stack the size (in pages) of the target memory.
      * A page is 64 * 1024 bytes (64KB). 
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public memorySize(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.MemorySizeInstruction.instance); }
+    public memorySize(memory?: string): this { return this.addInstruction(new Instructions.MemorySizeInstruction(this._selectMemory(memory))); }
     /**Try to grow the current memory page size by the number on the stack.
      * It pushes on the stack the old page size, or `-1` in case of failure (memory limit).
      * A page is 64 * 1024 bytes (64KB). 
      * (assumes the first memory if omitted since there should be only one memory in WASM-v1)
-     * @param {string} [memory] the target memory @todo
+     * @param {string} [memory] the target memory
      * @return {this} the builder itself (chainable method)
      */
-    public memoryGrow(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.MemoryGrowInstruction.instance); }
+    public memoryGrow(memory?: string): this { return this.addInstruction(new Instructions.MemoryGrowInstruction(this._selectMemory(memory))); }
     /** Unsupported @todo */
-    public memoryCopy(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.MemoryCopyInstruction.instance); }
+    public memoryCopy(memory?: string): this { return this.addInstruction(new Instructions.MemoryCopyInstruction(this._selectMemory(memory))); }
     /** Unsupported @todo */
-    public memoryFill(memory?: string): this { if (memory) { throw new Error('Not yet implemented'); } return this.addInstruction(Instructions.MemoryFillInstruction.instance); }
+    public memoryFill(memory?: string): this { return this.addInstruction(new Instructions.MemoryFillInstruction(this._selectMemory(memory))); }
 
     /** Map a type to a function result and execute it
      * @param {Object} mapping the type-function mapping
@@ -1075,175 +1214,175 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
      * Push 1 if true, 0 if false in the stack (as i32).
      * @return {this} the builder itself (chainable method)
      */
-     public isZeroInt64(): this { return this.addInstruction(Instructions.I64EqualZeroInstruction.instance); }
-     /**Check if the last two i64 values on the stack are equal.
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
-     public equalInt64(): this { return this.addInstruction(Instructions.I64EqualInstruction.instance); }
-     /**Check if the last two i64 values on the stack are different.
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
-     public notEqualInt64(): this { return this.addInstruction(Instructions.I64NotEqualInstruction.instance); }
-     /**Check if the last two i64 values on the stack are one lesser than the other (signed).
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
-     public lesserInt64(): this { return this.addInstruction(Instructions.I64LesserSignedInstruction.instance); }
-     /**Check if the last two i64 values on the stack are one lesser than the other (unsigned).
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
-     public lesserUInt64(): this { return this.addInstruction(Instructions.I64LesserUnsignedInstruction.instance); }
-     /**Check if the last two i64 values on the stack are one greater than the other (signed).
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
-     public greaterInt64(): this { return this.addInstruction(Instructions.I64GreaterSignedInstruction.instance); }
-     /**Check if the last two i64 values on the stack are one greater than the other (unsigned).
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
-     public greaterUInt64(): this { return this.addInstruction(Instructions.I64GreaterUnsignedInstruction.instance); }
-     /**Check if the last two i64 values on the stack are one lesser or equal than the other (signed).
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
-     public lesserEqualInt64(): this { return this.addInstruction(Instructions.I64LesserEqualSignedInstruction.instance); }
-     /**Check if the last two i64 values on the stack are one lesser or equal than the other (unsigned).
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
-     public lesserEqualUInt64(): this { return this.addInstruction(Instructions.I64LesserEqualUnsignedInstruction.instance); }
-     /**Check if the last two i64 values on the stack are one greater or equal than the other (signed).
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
-     public greaterEqualInt64(): this { return this.addInstruction(Instructions.I64GreaterEqualSignedInstruction.instance); }
-     /**Check if the last two i64 values on the stack are one greater or equal than the other (unsigned).
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
-     public greaterEqualUInt64(): this { return this.addInstruction(Instructions.I64GreaterEqualUnsignedInstruction.instance); }
-     /**Push on the stack the number of leading zero bits of the last i64 value on the stack.
-      * 
-      * es: `0b00100010 -> 2`
-      * 
-      * @return {this} the builder itself (chainable method)
-      */
-     public leadingZerosUInt64(): this { return this.addInstruction(Instructions.I64LeadingBitsUnsigendInstruction.instance); }
-     /**Push on the stack the number of trailing zero bits of the last i64 value on the stack.
-      * 
-      * es: `0b00100010 -> 1`
-      * 
-      * @return {this} the builder itself (chainable method)
-      */
-     public trailingZerosUInt64(): this { return this.addInstruction(Instructions.I64TrailingBitsUnsigendInstruction.instance); }
-     /**Push on the stack the number of setted bits of the last i64 value on the stack.
-      * 
-      * es: `0b00100011 -> 3`
-      * 
-      * @return {this} the builder itself (chainable method)
-      */
-     public onesCountInt64(): this { return this.addInstruction(Instructions.I64OnesCountInstruction.instance); }
-     /**Add the last two i64 values on the stack and push the result
-      * @return {this} the builder itself (chainable method)
-      */
-     public addInt64(): this { return this.addInstruction(Instructions.I64AddInstruction.instance); }
-     /**Subtract the last two i64 values on the stack and push the result
-      * @return {this} the builder itself (chainable method)
-      */
-     public subInt64(): this { return this.addInstruction(Instructions.I64SubtractInstruction.instance); }
-     /**Multiply the last two i64 values on the stack and push the result
-      * @return {this} the builder itself (chainable method)
-      */
-     public mulInt64(): this { return this.addInstruction(Instructions.I64MultiplyInstruction.instance); }
-     /**Divide the last two values on the stack and push the result.
-      * The values are intended as signed.
-      * @return {this} the builder itself (chainable method)
-      */
-     public divInt64(): this { return this.addInstruction(Instructions.I64DivideSignedInstruction.instance); }
-     /**Divide the last two values on the stack and push the result.
-      * The values are intended as unsigned.
-      * @return {this} the builder itself (chainable method)
-      */
-     public divUInt64(): this { return this.addInstruction(Instructions.I64DivideUnsignedInstruction.instance); }
-     /**Compute the modulo of the last two values on the stack and push the result.
-      * The values are intended as signed.
-      * @return {this} the builder itself (chainable method)
-      */
-     public remainderInt64(): this { return this.addInstruction(Instructions.I64RemainderSignedInstruction.instance); }
-     /**Compute the modulo of the last two values on the stack and push the result.
-      * The values are intended as unsigned.
-      * @return {this} the builder itself (chainable method)
-      */
-     public remainderUInt64(): this { return this.addInstruction(Instructions.I64RemainderUnsignedInstruction.instance); }
-     /**Bitwise and of the last two i64 values on the stack and push the result
-      * @return {this} the builder itself (chainable method)
-      */
-     public andInt64(): this { return this.addInstruction(Instructions.I64AndInstruction.instance); }
-     /**Bitwise or of the last two i64 values on the stack and push the result
-      * @return {this} the builder itself (chainable method)
-      */
-     public orInt64(): this { return this.addInstruction(Instructions.I64OrInstruction.instance); }
-     /**Bitwise xor of the last two i64 values on the stack and push the result
-      * @return {this} the builder itself (chainable method)
-      */
-     public xorInt64(): this { return this.addInstruction(Instructions.I64XOrInstruction.instance); }
-     /**Bitshift left the second last i64 value on the stack by the last i64 value and push the result
-      * @return {this} the builder itself (chainable method)
-      */
-     public shiftLeftInt64(): this { return this.addInstruction(Instructions.I64BitShifLeftInstruction.instance); }
-     /**Bitshift right the second last i64 value on the stack by the last i64 value and push the result.
-      * Consider the arguments as signed
-      * @return {this} the builder itself (chainable method)
-      */
-     public shiftRightInt64(): this { return this.addInstruction(Instructions.I64BitShifRightSignedInstruction.instance); }
-     /**Bitshift right the second last i64 value on the stack by the last i64 value and push the result
-      * Consider the arguments as unsigned
-      * @return {this} the builder itself (chainable method)
-      */
-     public shiftRightUInt64(): this { return this.addInstruction(Instructions.I64BitShifRightUnsignedInstruction.instance); }
-     /**Bitrotate left the second last i64 value on the stack by the last i64 value and push the result
-      * @return {this} the builder itself (chainable method)
-      */
-     public rotateLeftInt64(): this { return this.addInstruction(Instructions.I64BitRotationLeftInstruction.instance); }
-     /**Bitrotate right the second last i64 value on the stack by the last i64 value and push the result
-      * @return {this} the builder itself (chainable method)
-      */
-     public rotateRightInt64(): this { return this.addInstruction(Instructions.I64BitRotationRightInstruction.instance); }
+    public isZeroInt64(): this { return this.addInstruction(Instructions.I64EqualZeroInstruction.instance); }
+    /**Check if the last two i64 values on the stack are equal.
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
+    public equalInt64(): this { return this.addInstruction(Instructions.I64EqualInstruction.instance); }
+    /**Check if the last two i64 values on the stack are different.
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
+    public notEqualInt64(): this { return this.addInstruction(Instructions.I64NotEqualInstruction.instance); }
+    /**Check if the last two i64 values on the stack are one lesser than the other (signed).
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
+    public lesserInt64(): this { return this.addInstruction(Instructions.I64LesserSignedInstruction.instance); }
+    /**Check if the last two i64 values on the stack are one lesser than the other (unsigned).
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
+    public lesserUInt64(): this { return this.addInstruction(Instructions.I64LesserUnsignedInstruction.instance); }
+    /**Check if the last two i64 values on the stack are one greater than the other (signed).
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
+    public greaterInt64(): this { return this.addInstruction(Instructions.I64GreaterSignedInstruction.instance); }
+    /**Check if the last two i64 values on the stack are one greater than the other (unsigned).
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
+    public greaterUInt64(): this { return this.addInstruction(Instructions.I64GreaterUnsignedInstruction.instance); }
+    /**Check if the last two i64 values on the stack are one lesser or equal than the other (signed).
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
+    public lesserEqualInt64(): this { return this.addInstruction(Instructions.I64LesserEqualSignedInstruction.instance); }
+    /**Check if the last two i64 values on the stack are one lesser or equal than the other (unsigned).
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
+    public lesserEqualUInt64(): this { return this.addInstruction(Instructions.I64LesserEqualUnsignedInstruction.instance); }
+    /**Check if the last two i64 values on the stack are one greater or equal than the other (signed).
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
+    public greaterEqualInt64(): this { return this.addInstruction(Instructions.I64GreaterEqualSignedInstruction.instance); }
+    /**Check if the last two i64 values on the stack are one greater or equal than the other (unsigned).
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
+    public greaterEqualUInt64(): this { return this.addInstruction(Instructions.I64GreaterEqualUnsignedInstruction.instance); }
+    /**Push on the stack the number of leading zero bits of the last i64 value on the stack.
+     * 
+     * es: `0b00100010 -> 2`
+     * 
+     * @return {this} the builder itself (chainable method)
+     */
+    public leadingZerosUInt64(): this { return this.addInstruction(Instructions.I64LeadingBitsUnsigendInstruction.instance); }
+    /**Push on the stack the number of trailing zero bits of the last i64 value on the stack.
+     * 
+     * es: `0b00100010 -> 1`
+     * 
+     * @return {this} the builder itself (chainable method)
+     */
+    public trailingZerosUInt64(): this { return this.addInstruction(Instructions.I64TrailingBitsUnsigendInstruction.instance); }
+    /**Push on the stack the number of setted bits of the last i64 value on the stack.
+     * 
+     * es: `0b00100011 -> 3`
+     * 
+     * @return {this} the builder itself (chainable method)
+     */
+    public onesCountInt64(): this { return this.addInstruction(Instructions.I64OnesCountInstruction.instance); }
+    /**Add the last two i64 values on the stack and push the result
+     * @return {this} the builder itself (chainable method)
+     */
+    public addInt64(): this { return this.addInstruction(Instructions.I64AddInstruction.instance); }
+    /**Subtract the last two i64 values on the stack and push the result
+     * @return {this} the builder itself (chainable method)
+     */
+    public subInt64(): this { return this.addInstruction(Instructions.I64SubtractInstruction.instance); }
+    /**Multiply the last two i64 values on the stack and push the result
+     * @return {this} the builder itself (chainable method)
+     */
+    public mulInt64(): this { return this.addInstruction(Instructions.I64MultiplyInstruction.instance); }
+    /**Divide the last two values on the stack and push the result.
+     * The values are intended as signed.
+     * @return {this} the builder itself (chainable method)
+     */
+    public divInt64(): this { return this.addInstruction(Instructions.I64DivideSignedInstruction.instance); }
+    /**Divide the last two values on the stack and push the result.
+     * The values are intended as unsigned.
+     * @return {this} the builder itself (chainable method)
+     */
+    public divUInt64(): this { return this.addInstruction(Instructions.I64DivideUnsignedInstruction.instance); }
+    /**Compute the modulo of the last two values on the stack and push the result.
+     * The values are intended as signed.
+     * @return {this} the builder itself (chainable method)
+     */
+    public remainderInt64(): this { return this.addInstruction(Instructions.I64RemainderSignedInstruction.instance); }
+    /**Compute the modulo of the last two values on the stack and push the result.
+     * The values are intended as unsigned.
+     * @return {this} the builder itself (chainable method)
+     */
+    public remainderUInt64(): this { return this.addInstruction(Instructions.I64RemainderUnsignedInstruction.instance); }
+    /**Bitwise and of the last two i64 values on the stack and push the result
+     * @return {this} the builder itself (chainable method)
+     */
+    public andInt64(): this { return this.addInstruction(Instructions.I64AndInstruction.instance); }
+    /**Bitwise or of the last two i64 values on the stack and push the result
+     * @return {this} the builder itself (chainable method)
+     */
+    public orInt64(): this { return this.addInstruction(Instructions.I64OrInstruction.instance); }
+    /**Bitwise xor of the last two i64 values on the stack and push the result
+     * @return {this} the builder itself (chainable method)
+     */
+    public xorInt64(): this { return this.addInstruction(Instructions.I64XOrInstruction.instance); }
+    /**Bitshift left the second last i64 value on the stack by the last i64 value and push the result
+     * @return {this} the builder itself (chainable method)
+     */
+    public shiftLeftInt64(): this { return this.addInstruction(Instructions.I64BitShifLeftInstruction.instance); }
+    /**Bitshift right the second last i64 value on the stack by the last i64 value and push the result.
+     * Consider the arguments as signed
+     * @return {this} the builder itself (chainable method)
+     */
+    public shiftRightInt64(): this { return this.addInstruction(Instructions.I64BitShifRightSignedInstruction.instance); }
+    /**Bitshift right the second last i64 value on the stack by the last i64 value and push the result
+     * Consider the arguments as unsigned
+     * @return {this} the builder itself (chainable method)
+     */
+    public shiftRightUInt64(): this { return this.addInstruction(Instructions.I64BitShifRightUnsignedInstruction.instance); }
+    /**Bitrotate left the second last i64 value on the stack by the last i64 value and push the result
+     * @return {this} the builder itself (chainable method)
+     */
+    public rotateLeftInt64(): this { return this.addInstruction(Instructions.I64BitRotationLeftInstruction.instance); }
+    /**Bitrotate right the second last i64 value on the stack by the last i64 value and push the result
+     * @return {this} the builder itself (chainable method)
+     */
+    public rotateRightInt64(): this { return this.addInstruction(Instructions.I64BitRotationRightInstruction.instance); }
 
 
     /**Check if the last two f32 values on the stack are equal.
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
     public equalFloat32(): this { return this.addInstruction(Instructions.F32EqualInstruction.instance); }
     /**Check if the last two f32 values on the stack are different.
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
     public notEqualFloat32(): this { return this.addInstruction(Instructions.F32NotEqualInstruction.instance); }
     /**Check if the last two f32 values on the stack are one lesser than the other.
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
     public lesserFloat32(): this { return this.addInstruction(Instructions.F32LesserInstruction.instance); }
     /**Check if the last two f32 values on the stack are one greater than the other.
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
     public greaterFloat32(): this { return this.addInstruction(Instructions.F32GreaterInstruction.instance); }
     /**Check if the last two f32 values on the stack are one lesser or equal than the other.
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
     public lesserEqualFloat32(): this { return this.addInstruction(Instructions.F32LesserEqualInstruction.instance); }
     /**Check if the last two f32 values on the stack are one greater or equal than the other.
-      * Push 1 if true, 0 if false in the stack (as i32).
-      * @return {this} the builder itself (chainable method)
-      */
+     * Push 1 if true, 0 if false in the stack (as i32).
+     * @return {this} the builder itself (chainable method)
+     */
     public greaterEqualFloat32(): this { return this.addInstruction(Instructions.F32GreaterEqualInstruction.instance); }
     /**Push the absolute value of the last f32 element on the stack
      * @return {this} the builder itself (chainable method)
@@ -1304,92 +1443,92 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
     public signFloat32(): this { return this.addInstruction(Instructions.F32CopySignInstruction.instance); }
 
     /**Check if the last two f64 values on the stack are equal.
-      * Push 1 if true, 0 if false in the stack (as i64).
-      * @return {this} the builder itself (chainable method)
-      */
-     public equalFloat64(): this { return this.addInstruction(Instructions.F64EqualInstruction.instance); }
-     /**Check if the last two f64 values on the stack are different.
-       * Push 1 if true, 0 if false in the stack (as i64).
-       * @return {this} the builder itself (chainable method)
-       */
-     public notEqualFloat64(): this { return this.addInstruction(Instructions.F64NotEqualInstruction.instance); }
-     /**Check if the last two f64 values on the stack are one lesser than the other.
-       * Push 1 if true, 0 if false in the stack (as i64).
-       * @return {this} the builder itself (chainable method)
-       */
-     public lesserFloat64(): this { return this.addInstruction(Instructions.F64LesserInstruction.instance); }
-     /**Check if the last two f64 values on the stack are one greater than the other.
-       * Push 1 if true, 0 if false in the stack (as i64).
-       * @return {this} the builder itself (chainable method)
-       */
-     public greaterFloat64(): this { return this.addInstruction(Instructions.F64GreaterInstruction.instance); }
-     /**Check if the last two f64 values on the stack are one lesser or equal than the other.
-       * Push 1 if true, 0 if false in the stack (as i64).
-       * @return {this} the builder itself (chainable method)
-       */
-     public lesserEqualFloat64(): this { return this.addInstruction(Instructions.F64LesserEqualInstruction.instance); }
-     /**Check if the last two f64 values on the stack are one greater or equal than the other.
-       * Push 1 if true, 0 if false in the stack (as i64).
-       * @return {this} the builder itself (chainable method)
-       */
-     public greaterEqualFloat64(): this { return this.addInstruction(Instructions.F64GreaterEqualInstruction.instance); }
-     /**Push the absolute value of the last f64 element on the stack
-      * @return {this} the builder itself (chainable method)
-      */
-     public absFloat64(): this { return this.addInstruction(Instructions.F64AbsoluteInstruction.instance); }
-     /**Push the negative value of the last f64 element on the stack
-      * @return {this} the builder itself (chainable method)
-      */
-     public negFloat64(): this { return this.addInstruction(Instructions.F64NegativeInstruction.instance); }
-     /**Push the ceiled value of the last f64 element on the stack
-      * @return {this} the builder itself (chainable method)
-      */
-     public ceilFloat64(): this { return this.addInstruction(Instructions.F64CeilInstruction.instance); }
-     /**Push the floored value of the last f64 element on the stack
-      * @return {this} the builder itself (chainable method)
-      */
-     public floorFloat64(): this { return this.addInstruction(Instructions.F64FloorInstruction.instance); }
-     /**Push the truncated value of the last f64 element on the stack (simliar to floor)
-      * @return {this} the builder itself (chainable method)
-      */
-     public truncateFloat64(): this { return this.addInstruction(Instructions.F64TruncateInstruction.instance); }
-     /**Push the rounded value of the last f64 element on the stack
-      * @return {this} the builder itself (chainable method)
-      */
-     public nearestFloat64(): this { return this.addInstruction(Instructions.F64NearestInstruction.instance); }
-     /**Push the sqrt value of the last f64 element on the stack
-      * @return {this} the builder itself (chainable method)
-      */
-     public sqrtFloat64(): this { return this.addInstruction(Instructions.F64SquareRootInstruction.instance); }
-     /**Add the last two f64 values on the stack and push the result
-      * @return {this} the builder itself (chainable method)
-      */
-     public addFloat64(): this { return this.addInstruction(Instructions.F64AddInstruction.instance); }
-     /**Subtract the last two f64 values on the stack and push the result
-      * @return {this} the builder itself (chainable method)
-      */
-     public subFloat64(): this { return this.addInstruction(Instructions.F64SubtractInstruction.instance); }
-     /**Multiply the last two f64 values on the stack and push the result
-      * @return {this} the builder itself (chainable method)
-      */
-     public mulFloat64(): this { return this.addInstruction(Instructions.F64MultiplyInstruction.instance); }
-     /**Divide the last two f64 values on the stack and push the result
-      * @return {this} the builder itself (chainable method)
-      */
-     public divFloat64(): this { return this.addInstruction(Instructions.F64DivideInstruction.instance); }
-     /**Push the minimum of the last two f64 values on the stack
-      * @return {this} the builder itself (chainable method)
-      */
-     public minFloat64(): this { return this.addInstruction(Instructions.F64MinInstruction.instance); }
-     /**Push the maximum of the last two f64 values on the stack
-      * @return {this} the builder itself (chainable method)
-      */
-     public maxFloat64(): this { return this.addInstruction(Instructions.F64MaxInstruction.instance); }
-     /**Check if the last two f64 values on the stack share the same sign.
-      * If they are equal push 1, otherwise 0 (i64).
-      * @return {this} the builder itself (chainable method)
-      */
-     public signFloat64(): this { return this.addInstruction(Instructions.F64CopySignInstruction.instance); }
+     * Push 1 if true, 0 if false in the stack (as i64).
+     * @return {this} the builder itself (chainable method)
+     */
+    public equalFloat64(): this { return this.addInstruction(Instructions.F64EqualInstruction.instance); }
+    /**Check if the last two f64 values on the stack are different.
+     * Push 1 if true, 0 if false in the stack (as i64).
+     * @return {this} the builder itself (chainable method)
+     */
+    public notEqualFloat64(): this { return this.addInstruction(Instructions.F64NotEqualInstruction.instance); }
+    /**Check if the last two f64 values on the stack are one lesser than the other.
+     * Push 1 if true, 0 if false in the stack (as i64).
+     * @return {this} the builder itself (chainable method)
+     */
+    public lesserFloat64(): this { return this.addInstruction(Instructions.F64LesserInstruction.instance); }
+    /**Check if the last two f64 values on the stack are one greater than the other.
+     * Push 1 if true, 0 if false in the stack (as i64).
+     * @return {this} the builder itself (chainable method)
+     */
+    public greaterFloat64(): this { return this.addInstruction(Instructions.F64GreaterInstruction.instance); }
+    /**Check if the last two f64 values on the stack are one lesser or equal than the other.
+     * Push 1 if true, 0 if false in the stack (as i64).
+     * @return {this} the builder itself (chainable method)
+     */
+    public lesserEqualFloat64(): this { return this.addInstruction(Instructions.F64LesserEqualInstruction.instance); }
+    /**Check if the last two f64 values on the stack are one greater or equal than the other.
+     * Push 1 if true, 0 if false in the stack (as i64).
+     * @return {this} the builder itself (chainable method)
+     */
+    public greaterEqualFloat64(): this { return this.addInstruction(Instructions.F64GreaterEqualInstruction.instance); }
+    /**Push the absolute value of the last f64 element on the stack
+     * @return {this} the builder itself (chainable method)
+     */
+    public absFloat64(): this { return this.addInstruction(Instructions.F64AbsoluteInstruction.instance); }
+    /**Push the negative value of the last f64 element on the stack
+     * @return {this} the builder itself (chainable method)
+     */
+    public negFloat64(): this { return this.addInstruction(Instructions.F64NegativeInstruction.instance); }
+    /**Push the ceiled value of the last f64 element on the stack
+     * @return {this} the builder itself (chainable method)
+     */
+    public ceilFloat64(): this { return this.addInstruction(Instructions.F64CeilInstruction.instance); }
+    /**Push the floored value of the last f64 element on the stack
+     * @return {this} the builder itself (chainable method)
+     */
+    public floorFloat64(): this { return this.addInstruction(Instructions.F64FloorInstruction.instance); }
+    /**Push the truncated value of the last f64 element on the stack (simliar to floor)
+     * @return {this} the builder itself (chainable method)
+     */
+    public truncateFloat64(): this { return this.addInstruction(Instructions.F64TruncateInstruction.instance); }
+    /**Push the rounded value of the last f64 element on the stack
+     * @return {this} the builder itself (chainable method)
+     */
+    public nearestFloat64(): this { return this.addInstruction(Instructions.F64NearestInstruction.instance); }
+    /**Push the sqrt value of the last f64 element on the stack
+     * @return {this} the builder itself (chainable method)
+     */
+    public sqrtFloat64(): this { return this.addInstruction(Instructions.F64SquareRootInstruction.instance); }
+    /**Add the last two f64 values on the stack and push the result
+     * @return {this} the builder itself (chainable method)
+     */
+    public addFloat64(): this { return this.addInstruction(Instructions.F64AddInstruction.instance); }
+    /**Subtract the last two f64 values on the stack and push the result
+     * @return {this} the builder itself (chainable method)
+     */
+    public subFloat64(): this { return this.addInstruction(Instructions.F64SubtractInstruction.instance); }
+    /**Multiply the last two f64 values on the stack and push the result
+     * @return {this} the builder itself (chainable method)
+     */
+    public mulFloat64(): this { return this.addInstruction(Instructions.F64MultiplyInstruction.instance); }
+    /**Divide the last two f64 values on the stack and push the result
+     * @return {this} the builder itself (chainable method)
+     */
+    public divFloat64(): this { return this.addInstruction(Instructions.F64DivideInstruction.instance); }
+    /**Push the minimum of the last two f64 values on the stack
+     * @return {this} the builder itself (chainable method)
+     */
+    public minFloat64(): this { return this.addInstruction(Instructions.F64MinInstruction.instance); }
+    /**Push the maximum of the last two f64 values on the stack
+     * @return {this} the builder itself (chainable method)
+     */
+    public maxFloat64(): this { return this.addInstruction(Instructions.F64MaxInstruction.instance); }
+    /**Check if the last two f64 values on the stack share the same sign.
+     * If they are equal push 1, otherwise 0 (i64).
+     * @return {this} the builder itself (chainable method)
+     */
+    public signFloat64(): this { return this.addInstruction(Instructions.F64CopySignInstruction.instance); }
 
     /** Convert a number from a type to another
      * @param {(0x08|"i8")} source the source type (byte)
