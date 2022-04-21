@@ -17,7 +17,7 @@
     "compilation", "assembly", "web"
   ],
   "author": "Daniele Domenichelli <daniele.domenichelli.5+npm@gmail.com>",
-  "license": "ISC",
+  "license": "GPL-3.0-or-later",
   "bugs": {
     "url": "https://github.com/ddomen/kWAT/issues",
     "email": "daniele.domenichelli.5+npm@gmail.com"
