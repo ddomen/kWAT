@@ -1,5 +1,7 @@
-import type { IDecoder } from '../Encoding';
+import { Type } from '../Types';
 import { Reader, ReaderEvent } from './Reader';
+import { ExchangeDescriptionCode, SectionTypes } from '../Sections';
+import type { IDecoder } from '../Encoding';
 
 const sep = '$$$'
 
@@ -30,7 +32,22 @@ function printRead(evt: ReaderEvent): string {
     switch (typeof(evt.value)) {
         case 'object': break;
         case 'string': result += ' ("' + evt.value + '")'; break;
-        default: result += ' (' + evt.value + ') '; break;
+        case 'number': {
+            let val: any = evt.value;
+            let holder: Record<number, string> | null = null;
+            switch (evt.type) {
+                case 'section.types.code':
+                case 'section.types.function.result':
+                case 'section.types.function.param': holder = Type; break;
+                case 'section.code': holder = SectionTypes; break;
+                case 'section.exports.export.code':
+                case 'section.imports.import.code': holder = ExchangeDescriptionCode; break;
+            }
+            holder && (val += ':' + holder[val]);
+            result += ' (' + val + ')';
+            break;
+        }
+        default: result += ' (' + evt.value + ')'; break;
     }
     return result + '\n';
 }

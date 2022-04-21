@@ -44,7 +44,7 @@ export type ReaderEventMap = {
     version: ReaderEvent<'version', string>,
     
     section: ReaderEvent<'section', Section>
-    'section.start': ReaderEvent<'section.start', SectionTypes>,
+    'section.code': ReaderEvent<'section.code', SectionTypes>,
     'section.size': ReaderEvent<'section.size', number>,
 
     'section.types': ReaderEvent<'section.types', SectionTypeTypes[]>,
@@ -67,7 +67,7 @@ export type ReaderEventMap = {
     'section.imports.import.module': ReaderEvent<'section.imports.import.module', string>,
     'section.imports.import.name.size': ReaderEvent<'section.imports.import.name.size', number>,
     'section.imports.import.name': ReaderEvent<'section.imports.import.name', string>,
-    'section.imports.import.kind': ReaderEvent<'section.imports.import.kind', ExchangeDescriptionCode>,
+    'section.imports.import.code': ReaderEvent<'section.imports.import.code', ExchangeDescriptionCode>,
     'section.imports.import.signature': ReaderEvent<'section.imports.import.signature', number>,
 
     'section.exports': ReaderEvent<'section.exports', SectionExport[]>,
@@ -77,7 +77,7 @@ export type ReaderEventMap = {
     'section.exports.export.module': ReaderEvent<'section.exports.export.module', string>,
     'section.exports.export.name.size': ReaderEvent<'section.exports.export.name.size', number>,
     'section.exports.export.name': ReaderEvent<'section.exports.export.name', string>,
-    'section.exports.export.kind': ReaderEvent<'section.exports.export.kind', ExchangeDescriptionCode>,
+    'section.exports.export.code': ReaderEvent<'section.exports.export.code', ExchangeDescriptionCode>,
     'section.exports.export.signature': ReaderEvent<'section.exports.export.signature', number>
 
     'section.functions': ReaderEvent<'section.functions', number[]>,
@@ -86,10 +86,10 @@ export type ReaderEventMap = {
 
     'section.codes': ReaderEvent<'section.codes', SectionBody[]>,
     'section.codes.size': ReaderEvent<'section.codes.size', number>,
-    'section.codes.code': ReaderEvent<'section.codes.code', SectionBody>,
-    'section.codes.code.size': ReaderEvent<'section.codes.code.size', number>,
-    'section.codes.code.locals': ReaderEvent<'section.codes.code.locals', number>,
-    'section.codes.code.body': ReaderEvent<'section.codes.code.body', Uint8Array>,
+    'section.codes.function': ReaderEvent<'section.codes.function', SectionBody>,
+    'section.codes.function.size': ReaderEvent<'section.codes.function.size', number>,
+    'section.codes.function.locals': ReaderEvent<'section.codes.function.locals', number>,
+    'section.codes.function.body': ReaderEvent<'section.codes.function.body', Uint8Array>,
 
     'section.custom': ReaderEvent<'section.custom', SectionCustom>,
     'section.custom.name': ReaderEvent<'section.custom.name', string>,
@@ -196,7 +196,7 @@ export class Reader {
             const module = this._autoEmit('section.imports.import.module', () => this._decoder.string(modLen));
             const namLen = this._autoEmit('section.imports.import.name.size', () => this._decoder.uint32());
             const name = this._autoEmit('section.imports.import.name', () => this._decoder.string(namLen));
-            const kind = this._autoEmit('section.imports.import.kind', () => this._decoder.uint8());
+            const kind = this._autoEmit('section.imports.import.code', () => this._decoder.uint8());
             const type = this._autoEmit('section.imports.import.signature', () => this._decoder.uint32());
             return { module, name, kind, type, index };
         }, true)
@@ -225,7 +225,7 @@ export class Reader {
         return this._autoEmit('section.exports.export', () => {
             const namLen = this._autoEmit('section.exports.export.name.size', () => this._decoder.uint32());
             const name = this._autoEmit('section.exports.export.name', () => this._decoder.string(namLen));
-            const kind = this._autoEmit('section.exports.export.kind', () => this._decoder.uint8());
+            const kind = this._autoEmit('section.exports.export.code', () => this._decoder.uint8());
             const type = this._autoEmit('section.exports.export.signature', () => this._decoder.uint32());
             return { module, name, kind, type, index };
         }, true)
@@ -240,10 +240,10 @@ export class Reader {
     }
 
     private _parseFunctionBody(index: number): any {
-        return this._autoEmit('section.codes.code', () => {
-            const size = this._autoEmit('section.codes.code.size', () => this._decoder.uint32());
-            const locals = this._autoEmit('section.codes.code.locals', () => this._decoder.uint32());
-            const instructions = this._autoEmit('section.codes.code.body', () => this._decoder.read(this._decoder.remaining));
+        return this._autoEmit('section.codes.function', () => {
+            const size = this._autoEmit('section.codes.function.size', () => this._decoder.uint32());
+            const locals = this._autoEmit('section.codes.function.locals', () => this._decoder.uint32());
+            const instructions = this._autoEmit('section.codes.function.body', () => this._decoder.read(this._decoder.remaining));
             return { size, locals, instructions, index };
         }, true);
     }
@@ -273,7 +273,7 @@ export class Reader {
     }
 
     private _parseSection(): Section {
-        const code = this._autoEmit('section.start', () => this._decoder.uint8());
+        const code = this._autoEmit('section.code', () => this._decoder.uint8());
         const size = this._autoEmit('section.size', () => this._decoder.uint32());
         const section = this._autoEmit('section', () => {
             let data: any;
