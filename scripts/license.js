@@ -15,6 +15,7 @@ function makeLicense(filename, license, options) {
             .split('\n')
             .map(x => ' * ' + x)
             .join('\n') + '\n */\n\n' + s;
+        console.log('Licensing:', filename)    
         fs.writeFileSync(filename, l);
     }
 }
