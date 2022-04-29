@@ -13,7 +13,7 @@
   * 
   * You should have received a copy of the GNU General Public License
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+  */
 
 type IArray<T> = { [key: number]: T, length: number };
 export function insert<T>(target: T[], ...args: IArray<T>[]): T[] {

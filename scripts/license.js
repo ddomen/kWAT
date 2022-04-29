@@ -16,7 +16,7 @@ function makeLicense(filename, license, data, options) {
         let q = unicorn(license, data).split('\n');
         q.length && (q[0] = '@license ' + q[0]);
         q = q.map(x => '  * ' + x).join('\n');
-        const l = '/**\n' + q + '\n */\n\n' + s;
+        const l = '/**\n' + q + '\n  */\n\n' + s;
         console.log('Licensing:', filename)    
         fs.writeFileSync(filename, l);
     }

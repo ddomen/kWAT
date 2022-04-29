@@ -13,7 +13,7 @@
   * 
   * You should have received a copy of the GNU General Public License
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+  */
 
 /** Enumerations for express way to encode a number on buffers */
 export enum Relaxations {
