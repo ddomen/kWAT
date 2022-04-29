@@ -84,6 +84,13 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
     private static readonly _ext1Set: { [key in OpCodesExt1]?: Ext1Instructible } = { };
     private static readonly _ext2Set: { [key in OpCodesExt2]?: Ext2Instructible } = { };
 
+    public static resolveInstruction(code: OpCodes | OpCodesExt1 | OpCodesExt2): Instructible | null {
+        if (code in OpCodes) { return Instruction._instructionSet[code as OpCodes]!; }
+        else if (code in OpCodesExt1) { return Instruction._ext1Set[code as OpCodesExt1]!; }
+        else if (code in OpCodesExt2) { return Instruction._ext2Set[code as OpCodesExt2]!; }
+        return null;
+    }
+
     public static registerInstruction<O extends Exclude<OpCodes, OpCodes.op_extension_1>>(this: Instructible<O>, key: O): void;
     public static registerInstruction<O extends OpCodesExt1>(this: Ext1Instructible<O>, key: OpCodes.op_extension_1, forward: O): void;
     public static registerInstruction<O extends OpCodesExt2>(this: Ext2Instructible<O>, key: OpCodes.op_extension_2, forward: O): void;
