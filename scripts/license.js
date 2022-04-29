@@ -36,8 +36,13 @@ scanFolder(
     fs.readFileSync(path.join(__dirname, 'license'), { encoding: 'utf8' }),
     {
         year: new Date().getFullYear(),
-        author: 'Daniele Domenichelli',
-        version: pkg.version
+        author: pkg.author.replace(/\s*\<[^>]+\>\s*/g, '').trim(),
+        fullAuthor: pkg.author,
+        version: pkg.version,
+        package: pkg.name,
+        licenseType: pkg.license,
+        repository: pkg.repository.url,
+        description: pkg.description
     },
     {
         force: process.argv.includes('-f') || process.argv.includes('--force')
