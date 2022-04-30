@@ -201,6 +201,14 @@ export type ReaderEventMap = {
     'section.globals.global.mutable': ReaderEvent<'section.globals.global.mutable', boolean>,
     'section.globals.global.init': ReaderEvent<'section.globals.global.init', Expression>,
 
+    'section.tables': ReaderEvent<'section.tables', Table[]>,
+    'section.tables.size': ReaderEvent<'section.tables.size', number>,
+    'section.tables.table': ReaderEvent<'section.tables.table', Table>,
+    'section.tables.table.type': ReaderEvent<'section.tables.table.type', Type>,
+    'section.tables.table.hasMax': ReaderEvent<'section.tables.table.hasMax', boolean>,
+    'section.tables.table.min': ReaderEvent<'section.tables.table.min', number>,
+    'section.tables.table.max': ReaderEvent<'section.tables.table.max', number>,
+
     'section.datacount': ReaderEvent<'section.datacount', number>,
     'section.start': ReaderEvent<'section.start', number>,
 
@@ -248,6 +256,14 @@ export class Reader {
         if (type !== 'all' && type !== 'error') { this._emit('all', event as ReaderEvent<any>); }
         return this;
     }
+    private _u_autoEmit<T>(
+        type: string,
+        fn: () => T,
+        id: string | ((v: T) => string),
+        description?: string | null | ((v: T) => string | null),
+        enumeration?: string | Record<any, any> | null | ((v: T) => string),
+        composite: boolean = false
+    ): T { return (this._autoEmit as any)(type as any, fn, id, description, enumeration, composite); }
     private _autoEmit<K extends ReaderEventEsK>(
         type: K,
         fn: () => ReaderEventValue<K>,
@@ -297,18 +313,18 @@ export class Reader {
         parentId: string,
         desc: string
     ): Expression {
-        return this._autoEmit(
-            parent + '.expression' as any,
+        return this._u_autoEmit(
+            parent + '.expression',
             () => {
                 let arr: Expression = [];
                 let j = 0;
                 while (this._decoder.peek() !== OpCodes.end) {
                     const index = j++;
-                    arr.push((this._autoEmit(
-                        parent + '.expression.instruction' as any,
+                    arr.push(this._u_autoEmit(
+                        parent + '.expression.instruction',
                         () => {
-                            const code = this._autoEmit(
-                                parent + '.expression.instruction.code' as any,
+                            const code = this._u_autoEmit(
+                                parent + '.expression.instruction.code',
                                 () => this._decoder.uint8(),
                                 parentId + '.expression.instructions[' + index + ']',
                                 'Code of the instruction', OpCodes
@@ -318,8 +334,8 @@ export class Reader {
                                 code === OpCodes.op_extension_1 ||
                                 code === OpCodes.op_extension_2
                             ) {
-                                i.extCode = this._autoEmit(
-                                    parent + '.expression.instruction.extCode' as any,
+                                i.extCode = this._u_autoEmit(
+                                    parent + '.expression.instruction.extCode',
                                     () => this._decoder.uint8(),
                                     parentId + '.expression.instructions[' + index + '].ext',
                                     'Extension code of the instruction', OpCodes
@@ -330,17 +346,17 @@ export class Reader {
                             return { i, a, c };
                         },
                         parentId + '.expression.instructions[' + index + ']',
-                        ((v: { a: OpCodes }) => opDescriptions[v.a] || 'Unknown Instruction') as any,
-                        (v: { c: typeof IX }) => v.c.name,
+                        v => opDescriptions[v.a] || 'Unknown Instruction',
+                        v => v.c ? 'instance' in v.c ? v.c.instance.constructor.name : (v.c as any).name : '???',
                         true
-                    ) as { i: Instruction }).i);
+                    ).i);
                 }
                 ++j;
-                arr.push(this._autoEmit(
-                    parent + '.expression.instruction' as any,
+                arr.push(this._u_autoEmit(
+                    parent + '.expression.instruction',
                     () => ({
-                        code: this._autoEmit(
-                            parent + '.expression.instruction.code' as any,
+                        code: this._u_autoEmit(
+                            parent + '.expression.instruction.code',
                             () => this._decoder.uint8(),
                             parentId + '.expression.instructions[' + j + ']',
                             'Code of the instruction', OpCodes
@@ -350,7 +366,7 @@ export class Reader {
                     parentId + '.expression.instructions[' + j + ']',
                     opDescriptions[OpCodes.end] || 'Unknown Instruction',
                     null, true
-                ) as Instruction);
+                ));
                 return arr;
             },
             parentId + '.expression', desc, null, true
@@ -921,7 +937,8 @@ export class Reader {
                             'Instructions that express the offset computation'
                         ),
                         sid + '.offset',
-                        'The expression that computes the offset where to start the data table insertion'
+                        'The expression that computes the offset where to start the data table insertion',
+                        null, true
                     )
                 }
                 else if (m === 4 || m === 6) {
@@ -933,7 +950,8 @@ export class Reader {
                             'Instructions that express the offset computation'
                         ),
                         sid + '.offset',
-                        'The expression that computes the offset where to start the data table insertion'
+                        'The expression that computes the offset where to start the data table insertion',
+                        null, true
                     )
                 }
                 
@@ -1062,9 +1080,11 @@ export class Reader {
                     () => this._parseExpression(
                         'section.globals.global.init',
                         sid + '.init',
-                        'The expression that initialize the global variable'
+                        'The set of instructions that initialize the global variable'
                     ),
                     sid + '.init',
+                    'Global variable initialization expression',
+                    null, true
                 );
                 return { type, mutable, init };
             },
@@ -1096,24 +1116,258 @@ export class Reader {
         )
     }
 
-    protected _parseSection_custom(): SectionCustom {
+    protected _parseSection_table(): Table[] {
+        return this._autoEmit(
+            'section.tables',
+            () => {
+                const nTabs = this._autoEmit(
+                    'section.tables.size',
+                    () => this._decoder.uint32(),
+                    '#sections.tables.length',
+                    'The number of tables declared in the module'
+                );
+                const tabs: Table[] = [];
+                for (let i = 0; i < nTabs; ++i) {
+                    tabs.push(this._autoEmit(
+                        'section.tables.table',
+                        () => {
+                            const type = this._autoEmit(
+                                'section.tables.table.type',
+                                () => this._decoder.uint8(),
+                                '#sections.imports[' + i + '].declaration<table>.type',
+                                'The element type of the table',
+                                Type
+                            );
+                            const hasMax = this._autoEmit(
+                                'section.tables.table.hasMax',
+                                () => !!this._decoder.uint8(),
+                                '#sections.imports[' + i + '].declaration<table>.hasMax',
+                                'Wheter the maximum capacity of the table is set or not'
+                            );
+                            const min = this._autoEmit(
+                                'section.tables.table.min',
+                                () => this._decoder.uint32(),
+                                '#sections.imports[' + i + '].declaration<table>.min',
+                                'The minimum memory size required by the table (expressed in pages)'
+                            )
+                            
+                            const max = hasMax ? this._autoEmit(
+                                'section.tables.table.max',
+                                () => this._decoder.uint32(),
+                                '#sections.imports[' + i + '].declaration<table>.max',
+                                'The maximum memory size availiable for the table (expressed in pages)'
+                            ) : null;
+                            
+                            return { type, min, max };
+                        },
+                        '#sections.tables[' + i + ']',
+                        'The table definition', null, true
+                    ));
+                }
+                return tabs;
+            },
+            '#sections.tables',
+            'The section which holds all the table declarations of the module',
+            null, true
+        )
+    }
+
+    private _parseNameMap(parent: string, parentId: string, name: string) {
+        return this._u_autoEmit(
+            parent + '.' + name,
+            () => {
+                const nFun = this._u_autoEmit(
+                    parent + '.' + name + '.count',
+                    () => this._decoder.uint32(),
+                    parentId + '.' + name + '.length'
+                );
+                const fNames: Record<number, string> = {};
+                for (let i = 0; i < nFun; ++i) {
+                    const fn = this._u_autoEmit(
+                        parent + '.' + name + '.function',
+                        () => {
+                            const id = this._u_autoEmit(
+                                parent + '.' + name + '.function.reference',
+                                () => this._decoder.uint32(),
+                                v => parentId + '.' + name + '[' + v + '].reference'
+                            );
+                            const lName = this._u_autoEmit(
+                                parent + '.' + name + '.function.name.size',
+                                () => this._decoder.uint32(),
+                                parentId + '.' + name + '[' + id + '].name.length'
+                            )
+                            const _name = this._u_autoEmit(
+                                parent + '.' + name + '.function.name',
+                                () => this._decoder.string(lName),
+                                parentId + '.' + name + '[' + id + '].name'
+                            );
+                            return { id, name: _name }
+                        },
+                        v => parentId + '.' + name + '[' + v.id + ']',
+                        null, null, true
+                    )
+                    fNames[fn.id] = fn.name;
+                }
+                return fNames;
+            },
+            parentId + '.' + name,
+            null, null, true
+        )
+    }
+
+    protected _parseSectionCustom_name(size: number): SectionCustom {
+        let o = this._decoder.offset;
+        const subTypes: string[] = [
+            'module', 'function', 'local', 'label',
+            'type', 'table', 'memory', 'global',
+            'element', 'data'
+        ]
+        let i = 0;
+        const res: any = subTypes.reduce((o, k) => (o[k] = null, o), {} as any);
+
+        while (size > 0) {
+            const sid = '#sections.customs.names[' + i + ']';
+            this._u_autoEmit(
+                'section.custom.names',
+                () => {
+                    const sub = this._u_autoEmit(
+                        'section.custom.names.kind',
+                        () => subTypes[this._decoder.uint8()] || 'unknown',
+                        sid + '.kind'
+                    );
+                    if (sub === 'module') {
+                        return res.module = this._u_autoEmit(
+                            'section.custom.names.module',
+                            () => {
+                                this._u_autoEmit(
+                                    'section.custom.names.module.size',
+                                    () => this._decoder.uint32(),
+                                    '#sections.customs.names.module.size'
+                                )
+                                const nLen = this._u_autoEmit(
+                                    'section.custom.names.module.name.size',
+                                    () => this._decoder.uint32(),
+                                    '#sections.customs.names.module.name.length'
+                                )
+                                const name = this._u_autoEmit(
+                                    'section.custom.names.module.name',
+                                    () => this._decoder.string(nLen),
+                                    '#sections.customs.names.module.name'
+                                )
+                                return name;
+                            },
+                            '#sections.customs.names.module', null, null, true
+                        );
+                    }
+                    else if (sub === 'local') {
+                        return res.local = this._u_autoEmit(
+                            'section.custom.names.locals',
+                            () => {
+                                this._u_autoEmit(
+                                    'section.custom.name.locals.size',
+                                    () => this._decoder.uint32(),
+                                    '#sections.customs.names.locals.byteLength'
+                                );
+                                const nMaps = this._u_autoEmit(
+                                    'section.custom.name.locals.count',
+                                    () => this._decoder.uint32(),
+                                    '#sections.customs.names.locals.length'
+                                );
+                                const funMap: Record<number, Record<number, string>> = {};
+                                for (let i = 0; i < nMaps; ++i) {
+                                    const fn = this._u_autoEmit(
+                                        'section.custom.name.locals.local',
+                                        () => {
+                                            const fId = this._u_autoEmit(
+                                                'section.custom.name.locals.local.reference',
+                                                () => this._decoder.uint32(),
+                                                v => '#sections.customes.names.locals[' + v + ']'
+                                            );
+                                            const locMap = this._parseNameMap(
+                                                'section.custom.name.locals.local',
+                                                '#sections.customs.names.locals.local',
+                                                'name'
+                                            );
+                                            return { id: fId, map: locMap }
+                                        },
+                                        l => '#sections.customs.names.locals[' + l.id + ']',
+                                        null, null, true
+                                    )
+                                    funMap[fn.id] = fn.map;
+                                }
+                                return funMap;
+                            },
+                            '#sections.customs.names.locals',
+                            null, null, true
+                        );
+                    }
+                    else if (sub in res) {
+                        const p = sectionTypeToPlural(sub);
+                        this._u_autoEmit(
+                            'section.custom.names.' + p + '.size',
+                            () => this._decoder.uint32(),
+                            '#sections.customs.names.' + p + '.byteLength'
+                        );
+                        return res[sub] = this._parseNameMap(
+                            'section.custom.names.' + p,
+                            '#sections.customs.names.' + p,
+                            sub
+                        );
+                    }
+                    return res.unknown = this._u_autoEmit(
+                        'section.custom.names.unknown',
+                        () => this._decoder.read(size),
+                        '#sections.customs.names.unknwon'
+                    );
+                },
+                '#sections.customs.names',
+                null, null, true
+            )
+            size -= this._decoder.offset - o;
+            o = this._decoder.offset;
+            i++;
+        }
+        return { name: 'name', data: res };
+    }
+
+    protected _parseSection_custom(size: number): SectionCustom {
         return this._autoEmit('section.custom', () => {
-            const name = this._autoEmit('section.custom.name', () => {
-                const namLen = this._autoEmit('section.custom.name.size', () => this._decoder.uint32(), '#sections.customs.');
-                return this._decoder.string(namLen);
-            }, v => '#sections.custom.' + v + '.name');
+            const start = this._decoder.offset;
+            const namLen = this._decoder.uint32();
+            const name = this._decoder.string(namLen);
+            this._decoder.offset = start;
+            this._autoEmit(
+                'section.custom.name.size',
+                () => this._decoder.uint32(),
+                '#sections.customs.' + name + '.name.length'
+            );
+             this._autoEmit(
+                'section.custom.name',
+                () => this._decoder.string(namLen),
+                '#sections.customs.' + name + '.name'
+            );
             const method = '_parseSectionCustom_' + (name || '').toLowerCase();
-            const result: SectionCustom = { name, data: null }
-            if (method in this && typeof((this as any)[method]) === 'function') { result.data = (this as any)[method](this._decoder); }
-            else { result.data = this._autoEmit('section.custom.unknown', () => this._decoder.read(this._decoder.remaining), '#sections.customs.' + name + '.unknown'); }
+            const result: SectionCustom = { name, data: null };
+            const diffSize = size + start - this._decoder.offset;
+            if (method in this && typeof((this as any)[method]) === 'function') {
+                result.data = (this as any)[method].call(this, diffSize);
+            }
+            else {
+                result.data = this._autoEmit(
+                    'section.custom.unknown',
+                    () => this._decoder.read(diffSize),
+                    '#sections.customs.' + name + '.unknown',
+                    'An unrecognized custom section'
+                );
+            }
             return result;
         }, s => '#section.custom.' + s.name, null, null, true);
     }
 
-    private _parseSectionUnknown(): Uint8Array {
+    private _parseSectionUnknown(size: number): Uint8Array {
         return this._autoEmit(
             'section.unknown',
-            () => this._decoder.read(this._decoder.remaining),
+            () => this._decoder.read(size),
             '#sections.unknown',
             'A not identified section'
         );
@@ -1131,7 +1385,7 @@ export class Reader {
             const sid = '#sections.' + sectionTypeToPlural(code);
             const size = this._autoEmit('section.size', () => this._decoder.uint32(), sid + '.size', 'The current section size in bytes (size excluded)');
             const start = this._decoder.offset;
-            const data = ((this as any)['_parseSection_' + SectionTypes[code]] || this._parseSectionUnknown).call(this);
+            const data = ((this as any)['_parseSection_' + SectionTypes[code]] || this._parseSectionUnknown).call(this, size);
             const sec: Section = {
                 size,
                 type: code,
