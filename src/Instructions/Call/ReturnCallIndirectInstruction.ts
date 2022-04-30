@@ -63,4 +63,4 @@ export class ReturnCallIndirectInstruction extends AbstractCallInstruction<OpCod
         );
     }
 }
-ReturnCallIndirectInstruction.registerInstruction(OpCodes.call_indirect);
+ReturnCallIndirectInstruction.registerInstruction(OpCodes.return_call_indirect);

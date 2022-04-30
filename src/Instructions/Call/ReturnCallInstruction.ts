@@ -45,4 +45,4 @@ export class ReturnCallInstruction extends AbstractCallInstruction<OpCodes.retur
         return new ReturnCallInstruction(context.module.FunctionSection.Functions[index]!);
     }
 }
-ReturnCallInstruction.registerInstruction(OpCodes.call);
+ReturnCallInstruction.registerInstruction(OpCodes.return_call);
