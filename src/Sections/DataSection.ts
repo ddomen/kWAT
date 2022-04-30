@@ -142,7 +142,7 @@ export class DataSegment implements IEncodable<[Module, WasmOptions]> {
             }
             default: throw new Error('Invalid DataSegment kind: ' + kind);
         }
-        segment.Bytes.push(...decoder.read(decoder.remaining));
+        segment.Bytes.push(...decoder.vector('uint8'));
         return segment;
     }
 }
