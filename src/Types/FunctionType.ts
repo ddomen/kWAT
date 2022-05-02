@@ -16,6 +16,7 @@
   */
 
 import { protect } from '../internal';
+import { KWatError } from '../errors';
 import { Type, ResultType } from './Type';
 import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
 
@@ -79,7 +80,7 @@ import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
      * @returns {FunctionType} the read function type
      */
     public static decode(decoder: IDecoder): FunctionType {
-        if (decoder.uint8() != Type.func) { throw new Error('Invalid func type'); }
+        if (decoder.uint8() != Type.func) { throw new KWatError('Invalid func type'); }
         return new FunctionType(
             decoder.vector('uint8'),
             decoder.vector('uint8')

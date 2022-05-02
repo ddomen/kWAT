@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+import { KWatError } from '../errors';
 import type { ValueType } from './Type';
 import type { WasmOptions } from '../Module';
 import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
@@ -56,7 +57,7 @@ export class GlobalType implements IEncodable<WasmOptions> {
 
     public encode(encoder: IEncoder, opts: WasmOptions): void {
         if (!opts.mutableGlobals && !this.Constant) {
-            throw new Error('Mutable global detected');
+            throw new KWatError('Mutable global detected');
         }
         encoder.uint8(this.Constant ? 0 : 1).uint8(this.Type);
     }

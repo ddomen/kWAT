@@ -17,6 +17,7 @@
 
 import { OpCodes } from '../../OpCodes';
 import { protect } from '../../internal';
+import { KWatError } from '../../errors';
 import { AbstractBlockInstruction, BlockType } from './AbstractBlockInstruction';
 import * as Types from '../../Types';
 import type { IDecoder, IEncoder } from '../../Encoding';
@@ -61,7 +62,7 @@ export class IfThenElseInstruction extends AbstractBlockInstruction<OpCodes.if> 
             elseBlock = this.decodeBlock(decoder, context);
             decoder.uint8();
         }
-        if (context.blocks.shift() !== this) { throw new Error('Unexpected block on the context stack'); }
+        if (context.blocks.shift() !== this) { throw new KWatError('Unexpected block on the context stack'); }
         this.Type = type;
         this.Block.length = 0;
         this.Block.push(...block);

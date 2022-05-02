@@ -16,6 +16,7 @@
   */
 
 import { OpCodes } from '../../OpCodes';
+import { KWatError } from '../../errors';
 import { AbstractCallInstruction } from './AbstractCallInstruction';
 import type { IDecoder, IEncoder } from '../../Encoding';
 import type { ExpressionEncodeContext, StackEdit } from '../Instruction';
@@ -30,7 +31,7 @@ export class CallInstruction extends AbstractCallInstruction<OpCodes.call> {
     }
     public getFunctionIndex(context: ExpressionEncodeContext, pass?: boolean): number {
         let index = context.module.TypeSection.indexOf(this.Function);
-        if(!pass && index < 0) { throw new Error('Call Instruction invalid function reference'); }
+        if(!pass && index < 0) { throw new KWatError('Call Instruction invalid function reference'); }
         return index;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
@@ -40,7 +41,7 @@ export class CallInstruction extends AbstractCallInstruction<OpCodes.call> {
     }
     public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): CallInstruction {
         let index = decoder.uint32();
-        if (!context.module.FunctionSection.Functions[index]) { throw new Error('Call Instruction invalid function reference'); }
+        if (!context.module.FunctionSection.Functions[index]) { throw new KWatError('Call Instruction invalid function reference'); }
         return new CallInstruction(context.module.FunctionSection.Functions[index]!);
     }
 }

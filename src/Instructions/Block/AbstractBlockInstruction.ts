@@ -17,6 +17,7 @@
 
 import { OpCodes } from '../../OpCodes';
 import { protect } from '../../internal';
+import { KWatError } from '../../errors';
 import { GlobalVariableInstruction } from '../Variable';
 import { FunctionType, Type, ValueType } from '../../Types';
 import { ControlInstruction } from '../Control/ControlInstruction';
@@ -69,7 +70,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         }
         let l: number = -1;
         if (children.find(c => (l = c.getLabel(relative, true), l != -1))) { return l + 1; }
-        if (!pass) { throw new Error('Branch Instruction is not part of this Block Instruction'); }
+        if (!pass) { throw new KWatError('Branch Instruction is not part of this Block Instruction'); }
         return -1;
     }
 
@@ -78,7 +79,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         if (!this.Type) { encoder.uint8(EmptyBlock); }
         else if (this.Type instanceof FunctionType) {
             let index = context.module.TypeSection.indexOf(this.Type);
-            if (index < 0) { throw new Error('Invalid Block Type type reference'); }
+            if (index < 0) { throw new KWatError('Invalid Block Type type reference'); }
             encoder.int32(index);
         }
         else { encoder.uint8(this.Type); }
@@ -95,7 +96,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         this.encodeOpen(encoder, context);
         this.encodeBlock(encoder, context);
         this.encodeClose(encoder, context);
-        if (context.blocks.shift() !== this) { throw new Error('Unexpected block on the context stack'); }
+        if (context.blocks.shift() !== this) { throw new KWatError('Unexpected block on the context stack'); }
     }
 
     protected decodeType(decoder: IDecoder, context: ExpressionEncodeContext): BlockType {
@@ -105,7 +106,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         else {
             let index = decoder.int32();
             if (!context.module.TypeSection.Types[index]) {
-                throw new Error('Invalid Block Type type reference');
+                throw new KWatError('Invalid Block Type type reference');
             }
             block = context.module.TypeSection.Types[index]!;
         }
@@ -125,7 +126,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         let type = this.decodeType(decoder, context);
         let block = this.decodeBlock(decoder, context);
         decoder.uint8();
-        if (context.blocks.shift() !== this) { throw new Error('Unexpected block on the context stack'); }
+        if (context.blocks.shift() !== this) { throw new KWatError('Unexpected block on the context stack'); }
         this.Type = type;
         this.Block.length = 0;
         this.Block.push(...block);

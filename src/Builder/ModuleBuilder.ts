@@ -16,9 +16,9 @@
   */
 
 import { Module } from '../Module';
+import { KWatError } from '../errors';
 import { FunctionImporterBuilder } from './FunctionImporterBuilder';
 import { FunctionBuilder, FunctionDefinition } from './FunctionBuilder';
-import type { BuildingCallback, IBuilder } from './index';
 import {
     CodeSegment, CustomSections,
     DataMode, DataSegment,
@@ -35,6 +35,7 @@ import {
     I32ConstInstruction, I64ConstInstruction,
     NumericConstInstruction
 } from '../Instructions';
+import type { BuildingCallback, IBuilder } from './index';
 
 /** Allow to build a module with ease,
  * by preserving all the section informations
@@ -170,15 +171,15 @@ export class ModuleBuilder implements IBuilder<Module> {
         if (args.length === 1) { return this._tables[args[0]] || null; }
         let a = args[0], b = args[1], c = args[2], localName = args[3];
         if (typeof(a) === 'string') {
-            if (!validReferenceKey(a)) { throw new Error('Table type not recognized: \'' + a + '\''); }
+            if (!validReferenceKey(a)) { throw new KWatError('Table type not recognized: \'' + a + '\''); }
             a = Type[a];
         }
-        if (!validReference(a)) { throw new Error('Table type not recognized: \'' + a +'\''); }
+        if (!validReference(a)) { throw new KWatError('Table type not recognized: \'' + a +'\''); }
         b = Number(b) || 0;
         if (typeof(c) === 'string') { localName = c; c = undefined; }
         c = typeof(c) !== 'number' ? undefined : (Number(c) || 0);
         localName = localName || this.randomName(this._tables);
-        if (localName in this._tables) { throw new Error('Table \'' + localName + '\' already defined in this module'); }
+        if (localName in this._tables) { throw new KWatError('Table \'' + localName + '\' already defined in this module'); }
         this._tables[localName] = new TableType(a, b, c);
         return this;
     }
@@ -266,7 +267,7 @@ export class ModuleBuilder implements IBuilder<Module> {
         if (typeof(b) === 'string') { localName = b; b = undefined; }
         b = typeof(b) !== 'number' ? undefined : (Number(b) || 0);
         localName = localName || this.randomName(this._memories);
-        if (localName in this._memories) { throw new Error('Memory \'' + localName + '\' already defined in this module'); }
+        if (localName in this._memories) { throw new KWatError('Memory \'' + localName + '\' already defined in this module'); }
         this._memories[localName] = new LimitType(a, b);
         return this;
     }
@@ -301,7 +302,7 @@ export class ModuleBuilder implements IBuilder<Module> {
             try { value = new Uint8Array(Array.from(value)); } catch {}
         }
         if (!ArrayBuffer.isView(value)) {
-            throw new Error('Can not convert value to an Uint8Array');
+            throw new KWatError('Can not convert value to an Uint8Array');
         }
         this._data[index] = value.buffer;
         return this;
@@ -359,7 +360,7 @@ export class ModuleBuilder implements IBuilder<Module> {
         if (typeof(type) === 'string') { return this._globals[type] || null; }
         localName = localName || this.randomName(this._globals);
         if (localName in this._globals) {
-            throw new Error('Global \'' + localName + '\' already defined in this module');
+            throw new KWatError('Global \'' + localName + '\' already defined in this module');
         }
         let i: new(v?: number) => NumericConstInstruction;
         switch (type) {
@@ -418,7 +419,7 @@ export class ModuleBuilder implements IBuilder<Module> {
     public function(fn: BuildingCallback<FunctionBuilder> | string, localName?: string, starter?: boolean): this | FunctionDefinition | null {
         if (typeof(fn) === 'string') { return this._functions[fn] || null; }
         localName = localName || this.randomName(this._functions);
-        if (localName in this._functions) { throw new Error('Function \'' + localName + '\' already defined in this module'); }
+        if (localName in this._functions) { throw new KWatError('Function \'' + localName + '\' already defined in this module'); }
         this._functions[localName] = fn(new FunctionBuilder(this)).build();
         if (starter) { this._starter = localName; }
         return this;
@@ -475,7 +476,7 @@ export class ModuleBuilder implements IBuilder<Module> {
         for (const _ in this._data) {
             // const d = this._data[index]!;
             const ds = new DataSegment(DataMode.passive);
-            throw new Error('Data Sections building not yet implemented');
+            throw new KWatError('Data Sections building not yet implemented');
             m.DataSection.add(ds)
         }
         for (const name in this._memories) {

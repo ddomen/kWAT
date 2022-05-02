@@ -15,8 +15,9 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
-import { AbstractVariableInstruction } from './AbstractVariableInstruction';
+import { KWatError } from '../../errors';
 import { GlobalVariable } from '../../Sections';
+import { AbstractVariableInstruction } from './AbstractVariableInstruction';
 import type { OpCodes } from '../../OpCodes';
 import type { ExpressionEncodeContext, InstructionCtor } from '../Instruction';
 import type { IDecoder, IEncoder } from '../../Encoding';
@@ -28,7 +29,7 @@ export abstract class GlobalVariableInstruction<O extends GlobalVariableInstruct
     protected constructor(code: O, variable: GlobalVariable) { super(code); this.Variable = variable; }
     public getVariableIndex(context: ExpressionEncodeContext, pass?: boolean): number {
         let index = context.module.GlobalSection.Globals.indexOf(this.Variable);
-        if (!pass && index < 0) { throw new Error('Global Variable Instruction invalid variable reference'); }
+        if (!pass && index < 0) { throw new KWatError('Global Variable Instruction invalid variable reference'); }
         return index;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {

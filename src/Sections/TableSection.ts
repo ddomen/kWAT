@@ -16,6 +16,7 @@
   */
 
 import { protect } from '../internal';
+import { KWatError } from '../errors';
 import { Section, SectionTypes } from './Section';
 import * as Types from '../Types';
 import type { Module, WasmOptions } from '../Module';
@@ -53,7 +54,7 @@ export class TableSection extends Section<SectionTypes.table> {
                     .map(i => i.isTable() ? i.Description : null!)
                     .filter(x => !!x)    
             );
-            if (tabs.length > 1) { throw new Error('Multiple table declaration detected'); }
+            if (tabs.length > 1) { throw new KWatError('Multiple table declaration detected'); }
         }
         encoder.vector(this.Tables);
     }

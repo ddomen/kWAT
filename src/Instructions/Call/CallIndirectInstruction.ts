@@ -16,6 +16,7 @@
   */
 
 import { OpCodes } from '../../OpCodes';
+import { KWatError } from '../../errors';
 import { AbstractCallInstruction } from './AbstractCallInstruction';
 import * as Types from '../../Types';
 import type { IDecoder, IEncoder } from '../../Encoding';
@@ -37,12 +38,12 @@ export class CallIndirectInstruction extends AbstractCallInstruction<OpCodes.cal
     }
     public getTypeIndex(context: ExpressionEncodeContext, pass?: boolean): number {
         let index = context.module.TypeSection.indexOf(this.Type);
-        if(!pass && index < 0) { throw new Error('Call Indirect Instruction invalid type reference'); }
+        if(!pass && index < 0) { throw new KWatError('Call Indirect Instruction invalid type reference'); }
         return index;
     }
     public getTableIndex(context: ExpressionEncodeContext, pass?: boolean): number {
         let index = context.module.TableSection.Tables.indexOf(this.Table);
-        if(!pass && index < 0) { throw new Error('Call Indirect Instruction invalid table reference'); }
+        if(!pass && index < 0) { throw new KWatError('Call Indirect Instruction invalid table reference'); }
         return index;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
@@ -53,9 +54,9 @@ export class CallIndirectInstruction extends AbstractCallInstruction<OpCodes.cal
     }
     public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): CallIndirectInstruction {
         let type = decoder.uint32();
-        if (!context.module.TypeSection.Types[type]) { throw new Error('Call Indirect Instruction invalid type reference'); }
+        if (!context.module.TypeSection.Types[type]) { throw new KWatError('Call Indirect Instruction invalid type reference'); }
         let table = decoder.uint32();
-        if (!context.module.TableSection.Tables[table]) { throw new Error('Call Indirect Instruction invalid table reference'); }
+        if (!context.module.TableSection.Tables[table]) { throw new KWatError('Call Indirect Instruction invalid table reference'); }
         return new CallIndirectInstruction(
             context.module.TypeSection.Types[type]!,
             context.module.TableSection.Tables[table]!

@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+import { KWatError } from '../../errors';
 import { TableInstruction } from './TableInstruction';
 import type { TableType } from '../../Types';
 import type { OpCodesExt1 } from '../../OpCodes';
@@ -34,7 +35,7 @@ export abstract class TableOperationInstruction<O extends TableOpInstructionCode
         context: ExpressionDecodeContext
     ): TableOperationInstruction {
         let index = decoder.uint32();
-        if (!context.module.TableSection.Tables[index]) { throw new Error('Table Operation Instruction invalid table reference'); }
+        if (!context.module.TableSection.Tables[index]) { throw new KWatError('Table Operation Instruction invalid table reference'); }
         return new this(context.module.TableSection.Tables[index]!);
     }
 }

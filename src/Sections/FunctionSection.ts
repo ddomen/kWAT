@@ -16,6 +16,7 @@
   */
 
 import { protect } from '../internal';
+import { KWatError } from '../errors';
 import { Section, SectionTypes } from './Section';
 import * as Types from '../Types';
 import type { Module } from '../Module';
@@ -41,7 +42,7 @@ export class FunctionSection extends Section<SectionTypes.function> {
         let indices = this.Functions.map(f => mod.TypeSection.indexOf(f));
         let wrong: number | undefined;
         if (!pass && indices.some(i => (wrong = i, i < 0))) {
-            throw new Error('Invalid function definition index (at: ' + wrong + ')');
+            throw new KWatError('Invalid function definition index (at: ' + wrong + ')');
         }
         return indices;
     }
@@ -79,7 +80,7 @@ export class FunctionSection extends Section<SectionTypes.function> {
     public override decode(decoder: IDecoder, mod: Module) {
         let idxs = decoder.vector('uint32'), wrong;
         if (idxs.some(id => (wrong = id, !mod.TypeSection.Types[id]))) {
-            throw new Error('Invalid index in type section: ' + wrong)
+            throw new KWatError('Invalid index in type section: ' + wrong)
         }
         this.Functions.length = 0;
         this.Functions.push(...idxs.map(id => mod.TypeSection.Types[id]!.clone()));

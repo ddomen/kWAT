@@ -16,6 +16,7 @@
   */
 
 import { protect } from '../internal';
+import { KWatError } from '../errors';
 import { OpCodes, OpCodesExt1, OpCodesExt2 } from '../OpCodes';
 import * as Types from '../Types'
 import type { Module, WasmOptions } from '../Module';
@@ -41,7 +42,7 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
     protected constructor(code: O) { protect(this, 'Code', code, true); }
     public getIndex(expression: Expression, pass?: boolean): number {
         let index = expression.Instructions.indexOf(this);
-        if (!pass && index < 0) { throw new Error('Instruction not present in the current expression'); }
+        if (!pass && index < 0) { throw new KWatError('Instruction not present in the current expression'); }
         return index;
     }
     public encode(encoder: IEncoder, _: ExpressionEncodeContext): void { encoder.uint8(this.Code); }
@@ -70,7 +71,7 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
             result = stackOp;
         }
         if (!pass && !result) {
-            throw new Error(
+            throw new KWatError(
                 'Can not resolve stack for ' + this.constructor.name +
                 ' current stack: [' + stack.map(s => Types.Type[s]).join(', ') + ']' +
                 ' instruction edit: [' + (stackEdit[0] || []).map(s => typeof(s) === 'object' ? '?' : Types.Type[s]) + '] -> [' +
@@ -96,14 +97,14 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
     public static registerInstruction<O extends OpCodesExt2>(this: Ext2Instructible<O>, key: OpCodes.op_extension_2, forward: O): void;
     public static registerInstruction(this: Instructible | Ext1Instructible, key: OpCodes, forward?: OpCodesExt1): void {
         if (key === OpCodes.op_extension_1) {
-            if (!((typeof(forward) === 'undefined' ? -1 : forward) in OpCodesExt1)) { throw new Error('Invalid forward code 0x' + Number(forward).toString(16)); }
+            if (!((typeof(forward) === 'undefined' ? -1 : forward) in OpCodesExt1)) { throw new KWatError('Invalid forward code 0x' + Number(forward).toString(16)); }
             Instruction._ext1Set[forward!] = this as Ext1Instructible;
         }
         else if (key === OpCodes.op_extension_2) {
-            if (!((typeof(forward) === 'undefined' ? -1 : forward) in OpCodesExt2)) { throw new Error('Invalid forward code 0x' + Number(forward).toString(16)); }
+            if (!((typeof(forward) === 'undefined' ? -1 : forward) in OpCodesExt2)) { throw new KWatError('Invalid forward code 0x' + Number(forward).toString(16)); }
             Instruction._ext2Set[forward!] = this as Ext2Instructible;
         }
-        else if (!(key in OpCodes)) { throw new Error('Invalid opcode 0x' + Number(key).toString(16)); }
+        else if (!(key in OpCodes)) { throw new KWatError('Invalid opcode 0x' + Number(key).toString(16)); }
         else { Instruction._instructionSet[key] = this as Instructible; }
     }
     public static decode(decoder: IDecoder, context: ExpressionDecodeContext): Instruction {
@@ -111,10 +112,10 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
         if (code === OpCodes.op_extension_1) { ctor = Instruction._ext1Set[(fwd = decoder.uint32() as OpCodesExt1)]; }
         else if (code === OpCodes.op_extension_2) { ctor = Instruction._ext2Set[(fwd = decoder.uint32() as OpCodesExt2)]; }
         else { ctor = Instruction._instructionSet[code]; }
-        if (!ctor) { throw new Error('Unsupported Instruction code: 0x' + Number(code).toString(16) + (fwd >= 0 ? ' 0x' + Number(fwd).toString(16) : '')); }
+        if (!ctor) { throw new KWatError('Unsupported Instruction code: 0x' + Number(code).toString(16) + (fwd >= 0 ? ' 0x' + Number(fwd).toString(16) : '')); }
         if ('instance' in ctor && ctor.instance instanceof Instruction) { return ctor.instance; }
         else if ('decode' in ctor && typeof(ctor.decode) === 'function') { return ctor.decode(decoder, context); }
-        else { throw new Error('Unsupported Instruction code: 0x' + Number(code).toString(16) + (fwd >= 0 ? ' 0x' + Number(fwd).toString(16) : '')); }
+        else { throw new KWatError('Unsupported Instruction code: 0x' + Number(code).toString(16) + (fwd >= 0 ? ' 0x' + Number(fwd).toString(16) : '')); }
     }
     public static resolveStack(instructions: Instruction[], params: Types.ResultType): Passable<undefined, Types.ResultType>
     public static resolveStack<B extends boolean>(instructions: Instruction[], params: Types.ResultType, pass: B): Passable<B, Types.ResultType>

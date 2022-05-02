@@ -17,6 +17,7 @@
 
 import * as Types from '../Types';
 import { protect } from '../internal';
+import { KWatError } from '../errors';
 import { Section, SectionTypes, ExchangeDescriptionCode } from './Section';
 import type { Module } from '../Module';
 import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
@@ -79,15 +80,15 @@ export class ExportSegment implements IEncodable<Module> {
         else if (this.isGlobal()) { target = mod.GlobalSection.Globals; }
         else if (this.isMemory()) { target = mod.MemorySection.Memories; }
         else if (this.isTable()) { target = mod.TableSection.Tables; }
-        else { throw new Error('Invalid Description type'); }
+        else { throw new KWatError('Invalid Description type'); }
         let index = target.indexOf(this.Description as any);
-        if (!pass && index < 0) { throw new Error('Invalid function definition index!') }
+        if (!pass && index < 0) { throw new KWatError('Invalid function definition index!') }
         return index;
     }
 
     public encode(encoder: IEncoder, mod: Module) {
         let code = this.code;
-        if (code < 0) { throw new Error('Invalid export description!'); }
+        if (code < 0) { throw new KWatError('Invalid export description!'); }
         let index = this.getIndex(mod);
         encoder
             .vector(this.Name)
@@ -118,9 +119,9 @@ export class ExportSegment implements IEncodable<Module> {
             case ExchangeDescriptionCode.table:
                 target = mod.TableSection.Tables;
                 break;
-            default: throw new Error('Export Segment invalid description code');
+            default: throw new KWatError('Export Segment invalid description code');
         }
-        if (!target[index]) { throw new Error('Export Segment invalid reference'); }
+        if (!target[index]) { throw new KWatError('Export Segment invalid reference'); }
         return new ExportSegment(name, target[index]!)
     }
 }
@@ -152,7 +153,7 @@ export class ExportSection extends Section<SectionTypes.export> {
     protected contentEncode(encoder: IEncoder, mod: Module) {
         if (!this.Exports.length) { return; }
         if (this.Exports.some(i => i.getIndex(mod) < 0)) {
-            throw new Error('Invalid function definition index');
+            throw new KWatError('Invalid function definition index');
         }
         encoder.vector(this.Exports, mod);
     }

@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+import { KWatError } from '../errors';
 import * as Types from '../Types';
 import * as Sections from '../Sections';
 import * as Instructions from '../Instructions';
@@ -83,7 +84,7 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
         instructions.forEach(i => {
             if (!(i instanceof Instructions.Instruction)) {
                 if ('instance' in i && i.instance instanceof Instructions.Instruction) { i = i.instance; }
-                else { throw new Error('Invalid body expression: ' + i); }
+                else { throw new KWatError('Invalid body expression: ' + i); }
             }
             // this._stack = i.evaluate(this._stack);
             this._instructions.push(i);
@@ -111,12 +112,12 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
     public label(label: string, block?: Instructions.AbstractBlockInstruction | boolean): this | Instructions.AbstractBlockInstruction | null {
         label = '' + label;
         if (block instanceof Instructions.AbstractBlockInstruction) {
-            if (label in this.labels) { throw new Error('Expression Builder label \'' + label + '\' already declared in this scope'); }
+            if (label in this.labels) { throw new KWatError('Expression Builder label \'' + label + '\' already declared in this scope'); }
             this._labels[label] = block;
             return this;
         }
         let result = this.labels[label] || null;
-        if (!block && !result) { throw new Error('Expression Builder undefined label \'' + label + '\''); }
+        if (!block && !result) { throw new KWatError('Expression Builder undefined label \'' + label + '\''); }
         return result;
     }
 
@@ -273,13 +274,13 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
     public call(name: string, external: boolean=false): this {
         if (!external) {
             const fn = this._function.module.function(name);
-            if (!fn) { throw new Error('Function definition not found: \'' + name +'\''); }
+            if (!fn) { throw new KWatError('Function definition not found: \'' + name +'\''); }
             return this.addInstruction(new Instructions.CallInstruction(fn.type));
         }
         const md = name.split('.', 2);
         const im = this._function.module.importFunction(md[0] || '', md[1] || '');
-        if (!im) { throw new Error('Import definition not found: \'' + name +'\''); }
-        else if (!(im instanceof Types.FunctionType)) { throw new Error('Import definition is not a function: \'' + name +'\''); }
+        if (!im) { throw new KWatError('Import definition not found: \'' + name +'\''); }
+        else if (!(im instanceof Types.FunctionType)) { throw new KWatError('Import definition is not a function: \'' + name +'\''); }
         return this.addInstruction(new Instructions.CallInstruction(im));
     }
 
@@ -298,7 +299,7 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
         const t = typeof(table) === 'string' ?
                     this._function.module.table(table) :
                     (table || this._function.module.table());
-        if (!t) { throw new Error('Can not resolve table: \'' + table + '\''); }
+        if (!t) { throw new KWatError('Can not resolve table: \'' + table + '\''); }
         return this.addInstruction(new Instructions.CallIndirectInstruction(type, t))
     }
 
@@ -346,7 +347,7 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
                     Instructions.ReferenceNullInstruction.FunctionRef
             );
         }
-        throw new Error('ReferenceFunctionInstruction not yet implemented');
+        throw new KWatError('ReferenceFunctionInstruction not yet implemented');
         // if (typeof(ref) === 'string') { ref = this._function.module.function(ref) }
         // return this.addInstruction(new Instructions.ReferenceFunctionInstruction(ref));
     }
@@ -456,7 +457,7 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
             case Types.Type.i64: case 'i64': case 'int64': case 'uint64': case 'long': case 'ulong': return this.loadInt64(memory);
             case Types.Type.f32: case 'f32': case 'float32': case 'single': return this.loadFloat32(memory);
             case Types.Type.f64: case 'f64': case 'float64': case 'double': return this.loadFloat64(memory);
-            default: throw new Error('Unrecognized type: ' + type);
+            default: throw new KWatError('Unrecognized type: ' + type);
         }
     }
 
@@ -581,7 +582,7 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
             case Types.Type.i64: case 'i64': case 'int64': case 'uint64': case 'long': case 'ulong': return this.storeInt64(memory);
             case Types.Type.f32: case 'f32': case 'float32': case 'single': return this.storeFloat32(memory);
             case Types.Type.f64: case 'f64': case 'float64': case 'double': return this.storeFloat64(memory);
-            default: throw new Error('Unrecognized type: ' + type);
+            default: throw new KWatError('Unrecognized type: ' + type);
         }
     }
 
@@ -717,7 +718,7 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
     ): this {
         if (typeof(type) === 'number') { type = Types.Type[type] as Types.TypesKey<T>; }
         if (typeof(mapping[type]) === 'function') { return mapping[type].apply(this, args); }
-        throw new Error('Invalid type')
+        throw new KWatError('Invalid type')
     }
 
     
@@ -1737,7 +1738,7 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
                             (options.unsigned ? this.saturateFloat32ToUInt64 : this.saturateFloat32ToInt64) :
                             (options.unsigned ?  this.truncateFloat32ToUInt64 : this.truncateFloat32ToInt64)
             }, destination as any)
-            default: throw new Error('Invalid source type');
+            default: throw new KWatError('Invalid source type');
         }
     }
 

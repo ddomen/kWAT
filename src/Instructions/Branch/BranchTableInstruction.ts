@@ -17,6 +17,7 @@
 
 import { OpCodes } from '../../OpCodes';
 import { protect } from '../../internal';
+import { KWatError } from '../../errors';
 import { AbstractBranchInstruction } from './AbstractBranchInstruction';
 import * as Types from '../../Types';
 import type { AbstractBlockInstruction } from '../Block';
@@ -42,7 +43,7 @@ export class BranchTableInstruction extends AbstractBranchInstruction<OpCodes.br
         let bti = AbstractBranchInstruction.decode.call(this, decoder, context) as BranchTableInstruction;
         let labels = decoder.vector('uint32')
         labels.push(decoder.uint32());
-        if (labels.some(l => !context.blocks[l])) { throw new Error('Branch Table Instruction invalid target label'); }
+        if (labels.some(l => !context.blocks[l])) { throw new KWatError('Branch Table Instruction invalid target label'); }
         bti.Targets.length = 0;
         bti.Targets.push(...labels.map(l => context.blocks[l]!));
         return bti;

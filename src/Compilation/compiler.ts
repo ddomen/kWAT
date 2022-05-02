@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+import { KWatError } from '../errors';
 import { Module, WasmOptions } from '../Module';
 import { IParser, IParserCtor, SExpressionParser } from './parser';
 import { Decoder, Encoder, IDecoder, IDecoderCtor, IEncoder, IEncoderCtor } from '../Encoding';
@@ -44,7 +45,7 @@ export function compile(target: Module | string, parser?: IParser | IParserCtor 
     if (typeof(target) === 'string') {
         if (!parser) { parser = new SExpressionParser(); }
         else if (typeof(parser) === 'function') { parser = new parser(); }
-        if (!('parse' in parser)) { throw new Error('Invalid parser: ' + parser); }
+        if (!('parse' in parser)) { throw new KWatError('Invalid parser: ' + parser); }
         target = parser.parse(target);
     }
     else { options = Object.assign({}, parser as CompilationOptions); }

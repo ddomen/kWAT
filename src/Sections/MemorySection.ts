@@ -16,6 +16,7 @@
   */
 
 import { protect } from '../internal';
+import { KWatError } from '../errors';
 import { Section, SectionTypes } from './Section';
 import * as Types from '../Types';
 import type { Module, WasmOptions } from '../Module';
@@ -61,7 +62,7 @@ export class MemorySection extends Section<SectionTypes.memory> {
                     .map(i => i.isMemory() ? i.Description : null!)
                     .filter(x => !!x)
             );
-            if (mem.length > 1) { throw new Error('Multiple memory declaration detected'); }
+            if (mem.length > 1) { throw new KWatError('Multiple memory declaration detected'); }
         }
         encoder.vector(this.Memories);
     }

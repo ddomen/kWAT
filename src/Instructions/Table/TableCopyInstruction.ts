@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+import { KWatError } from '../../errors';
 import { TableType, Type } from '../../Types';
 import { TableInstruction } from './TableInstruction';
 import { OpCodes, OpCodesExt1 } from '../../OpCodes';
@@ -32,11 +33,11 @@ export class TableCopyInstruction extends TableInstruction<OpCodesExt1.table_cop
     }
     public getDestinationIndex(context: ExpressionEncodeContext, pass?: boolean): number {
         let index = context.module.TableSection.Tables.indexOf(this.Destination);
-        if(!pass && index < 0) { throw new Error('Table Instruction invalid destination table reference'); }
+        if(!pass && index < 0) { throw new KWatError('Table Instruction invalid destination table reference'); }
         return index;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
-        if (!context.options.bulkMemory) { throw new Error('Bulk memory instruction detected'); }
+        if (!context.options.bulkMemory) { throw new KWatError('Bulk memory instruction detected'); }
         let dst = this.getDestinationIndex(context),
             src = this.getTableIndex(context);
         super.encode(encoder, context);
@@ -44,9 +45,9 @@ export class TableCopyInstruction extends TableInstruction<OpCodesExt1.table_cop
     }
     public static override decode(decoder: IDecoder, context: ExpressionDecodeContext): TableCopyInstruction {
         let src = decoder.uint32();
-        if (!context.module.TableSection.Tables[src]) { throw new Error('Table Copy Instruction invalid source table reference'); }
+        if (!context.module.TableSection.Tables[src]) { throw new KWatError('Table Copy Instruction invalid source table reference'); }
         let dest = decoder.uint32();
-        if (!context.module.TableSection.Tables[dest]) { throw new Error('Table Copy Instruction invalid destination table reference'); }
+        if (!context.module.TableSection.Tables[dest]) { throw new KWatError('Table Copy Instruction invalid destination table reference'); }
         return new TableCopyInstruction(
             context.module.TableSection.Tables[src]!,
             context.module.TableSection.Tables[dest]!

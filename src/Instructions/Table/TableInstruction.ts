@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+import { KWatError } from '../../errors';
 import { protect } from '../../internal';
 import { OpCodes, OpCodesExt1 } from '../../OpCodes';
 import { AbstractTableInstruction } from './AbstractTableInstruction';
@@ -34,7 +35,7 @@ export abstract class TableInstruction<O extends TableInstructionForwardCodes=Ta
     }
     public getTableIndex(context: ExpressionEncodeContext, pass?: boolean): number {
         let index = context.module.TableSection.Tables.indexOf(this.Table);
-        if(!pass && index < 0) { throw new Error('Table Instruction invalid table reference'); }
+        if(!pass && index < 0) { throw new KWatError('Table Instruction invalid table reference'); }
         return index;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {

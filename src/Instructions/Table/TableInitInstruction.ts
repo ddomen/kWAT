@@ -15,12 +15,13 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
-import { TableType, Type } from "../../Types";
-import { TableInstruction } from "./TableInstruction";
-import { OpCodes, OpCodesExt1 } from "../../OpCodes";
-import type { ElementSegment } from "../../Sections";
-import type { IDecoder, IEncoder } from "../../Encoding";
-import type { ExpressionDecodeContext, ExpressionEncodeContext, StackEdit } from "../Instruction";
+import { KWatError } from '../../errors';
+import { TableType, Type } from '../../Types';
+import { TableInstruction } from './TableInstruction';
+import { OpCodes, OpCodesExt1 } from '../../OpCodes';
+import type { ElementSegment } from '../../Sections';
+import type { IDecoder, IEncoder } from '../../Encoding';
+import type { ExpressionDecodeContext, ExpressionEncodeContext, StackEdit } from '../Instruction';
 
 export class TableInitInstruction extends TableInstruction<OpCodesExt1.table_init> {
     public Element: ElementSegment;
@@ -28,11 +29,11 @@ export class TableInitInstruction extends TableInstruction<OpCodesExt1.table_ini
     public constructor(table: TableType, element: ElementSegment) { super(OpCodesExt1.table_init, table); this.Element = element; }
     public getElementIndex(context: ExpressionEncodeContext, pass?: boolean): number {
         let index = context.module.ElementSection.Elements.indexOf(this.Element);
-        if(!pass && index < 0) { throw new Error('Table Init Instruction invalid element reference'); }
+        if(!pass && index < 0) { throw new KWatError('Table Init Instruction invalid element reference'); }
         return index;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
-        if (!context.options.bulkMemory) { throw new Error('Bulk memory instruction detected'); }
+        if (!context.options.bulkMemory) { throw new KWatError('Bulk memory instruction detected'); }
         let elem = this.getElementIndex(context),
             table = this.getTableIndex(context);
         super.encode(encoder, context);
@@ -40,9 +41,9 @@ export class TableInitInstruction extends TableInstruction<OpCodesExt1.table_ini
     }
     public static override decode(decoder: IDecoder, context: ExpressionDecodeContext): TableInitInstruction {
         let elem = decoder.uint32();
-        if (!context.module.ElementSection.Elements[elem]) { throw new Error('Table Init Instruction invalid element reference'); }
+        if (!context.module.ElementSection.Elements[elem]) { throw new KWatError('Table Init Instruction invalid element reference'); }
         let table = decoder.uint32();
-        if (!context.module.TableSection.Tables[table]) { throw new Error('Table Init Instruction invalid table reference'); }
+        if (!context.module.TableSection.Tables[table]) { throw new KWatError('Table Init Instruction invalid table reference'); }
         return new TableInitInstruction(
             context.module.TableSection.Tables[table]!,
             context.module.ElementSection.Elements[elem]!

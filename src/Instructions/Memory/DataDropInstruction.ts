@@ -16,6 +16,7 @@
   */
 
 import { protect } from '../../internal';
+import { KWatError } from '../../errors';
 import { OpCodes, OpCodesExt1 } from '../../OpCodes';
 import { AbstractMemoryInstruction } from './AbstractMemoryInstruction';
 import type { DataSegment } from '../../Sections';
@@ -32,18 +33,18 @@ export class DataDropInstruction extends AbstractMemoryInstruction<OpCodes.op_ex
     }
     public getDataIndex(context: ExpressionEncodeContext, pass?: boolean): number {
         let index = context.module.DataSection.Datas.indexOf(this.Data);
-        if (!pass && index < 0) { throw new Error('Memory Init Instruction invalid data reference'); }
+        if (!pass && index < 0) { throw new KWatError('Memory Init Instruction invalid data reference'); }
         return index;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
-        if (!context.options.bulkMemory) { throw new Error('Bulk memory instruction detected'); }
+        if (!context.options.bulkMemory) { throw new KWatError('Bulk memory instruction detected'); }
         let index = this.getDataIndex(context);
         super.encode(encoder, context);
         encoder.uint32(this.OperationCode).uint32(index);
     }
     public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): DataDropInstruction {
         let index = decoder.uint32();
-        if (!context.module.DataSection.Datas[index]) { throw new Error('Memory Init Instruction invalid data reference'); }
+        if (!context.module.DataSection.Datas[index]) { throw new KWatError('Memory Init Instruction invalid data reference'); }
         return new DataDropInstruction(context.module.DataSection.Datas[index]!)
     }
 }

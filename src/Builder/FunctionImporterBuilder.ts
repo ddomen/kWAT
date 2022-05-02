@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+import { KWatError } from '../errors';
 import * as Types from '../Types';
 import type { IBuilder } from './index';
 import type { ModuleBuilder } from './ModuleBuilder';
@@ -44,7 +45,7 @@ export class FunctionImporterBuilder implements IBuilder<Types.FunctionType> {
         types.unshift(type);
         this._parameters.push(...types.map(t => {
             if (typeof(t) === 'string') { t = Types.Type[t] || t; }
-            if (!Types.validValue(t)) { throw new Error('Invalid parameter Type: ' + t); }
+            if (!Types.validValue(t)) { throw new KWatError('Invalid parameter Type: ' + t); }
             return t;
         }));
         return this;
@@ -59,7 +60,7 @@ export class FunctionImporterBuilder implements IBuilder<Types.FunctionType> {
         types.unshift(type);
         this._results.push(...types.map(t => {
             if (typeof(t) === 'string') { t = Types.Type[t] || t; }
-            if (!Types.validValue(t)) { throw new Error('Invalid result Type: ' + t); }
+            if (!Types.validValue(t)) { throw new KWatError('Invalid result Type: ' + t); }
             return t;
         }));
         return this;

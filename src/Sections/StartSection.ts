@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+import { KWatError } from '../errors';
 import { Section, SectionTypes } from './Section';
 import * as Types from '../Types';
 import type { Module } from '../Module';
@@ -42,10 +43,10 @@ import type { IEncoder, IDecoder } from '../Encoding';
      * @returns {number} the index of the start function, `-1` if not found
      */
     public getStartIndex(mod: Module, pass?: boolean): number {
-        if (!pass && !this.Target) { throw new Error('Invalid starting function index'); }
+        if (!pass && !this.Target) { throw new KWatError('Invalid starting function index'); }
         if (!this.Target) { return -1; }
         let index = mod.TypeSection.indexOf(this.Target);
-        if (!pass && index < 0) { throw new Error('Invalid starting function index'); }
+        if (!pass && index < 0) { throw new KWatError('Invalid starting function index'); }
         return index;
     }
 
@@ -56,7 +57,7 @@ import type { IEncoder, IDecoder } from '../Encoding';
     public override decode(decoder: IDecoder, mod: Module) {
         let index = decoder.uint32();
         if (!mod.TypeSection.Types[index]) {
-            throw new Error('Start Section invalid function reference');
+            throw new KWatError('Start Section invalid function reference');
         }
         this.Target = mod.TypeSection.Types[index]!;
     }

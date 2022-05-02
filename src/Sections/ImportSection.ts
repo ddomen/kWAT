@@ -17,6 +17,7 @@
 
 import * as Types from '../Types';
 import { protect } from '../internal';
+import { KWatError } from '../errors';
 import { Section, SectionTypes, ExchangeDescriptionCode } from './Section';
 import type { Module } from '../Module';
 import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
@@ -81,9 +82,9 @@ export class ImportSegment implements IEncodable<[Types.FunctionType[]]> {
      *                  relative to the given array of function definitions
      */
     public getIndex(fns: Types.FunctionType[], pass?: boolean): number {
-        if (!this.isFunction()) { throw new Error('Can not get index from a non-function reference!'); }
+        if (!this.isFunction()) { throw new KWatError('Can not get index from a non-function reference!'); }
         let index = fns.findIndex(x => x.equals(this.Description as Types.FunctionType));
-        if (!pass && index < 0) { throw new Error('Invalid function definition index!') }
+        if (!pass && index < 0) { throw new KWatError('Invalid function definition index!') }
         return index;
     }
 
@@ -117,7 +118,7 @@ export class ImportSegment implements IEncodable<[Types.FunctionType[]]> {
         }
         else {
             let code = this.code;
-            if (code < 0) { throw new Error('Invalid import description!'); }
+            if (code < 0) { throw new KWatError('Invalid import description!'); }
             encoder
                 .vector(this.Module)
                 .vector(this.Name)
@@ -141,7 +142,7 @@ export class ImportSegment implements IEncodable<[Types.FunctionType[]]> {
             case ExchangeDescriptionCode.function: {
                 let index = decoder.uint32();
                 if (!mod.TypeSection.Types[index]) {
-                    throw new Error('Invalid Import Segment function reference');
+                    throw new KWatError('Invalid Import Segment function reference');
                 }
                 desc = mod.TypeSection.Types[index]!;
                 break;
@@ -155,7 +156,7 @@ export class ImportSegment implements IEncodable<[Types.FunctionType[]]> {
             case ExchangeDescriptionCode.table:
                 desc = decoder.decode(Types.TableType);
                 break;
-            default: throw new Error('Invalid Import Segment type: ' + type);
+            default: throw new KWatError('Invalid Import Segment type: ' + type);
         }
         return new ImportSegment(ns, name, desc)
     }
@@ -195,7 +196,7 @@ export class ImportSection extends Section<SectionTypes.import> {
     protected contentEncode(encoder: IEncoder, mod: Module): void {
         if (!this.Imports.length) { return; }
         if (this.Imports.filter(i => i.isFunction()).some(i => mod.TypeSection.indexOf(i.Description as Types.FunctionType) < 0 || i.code < 0)) {
-            throw new Error('Invalid function definition index');
+            throw new KWatError('Invalid function definition index');
         }
         encoder.vector(this.Imports, mod.TypeSection.Types);
     }

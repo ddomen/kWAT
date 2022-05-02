@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+ import { KWatError } from '../../errors';
 import { protect } from '../../internal';
 import { CustomSection } from '../CustomSection';
 import type { IDecoder, IEncodable, IEncoder } from '../../Encoding';
@@ -116,7 +117,7 @@ export class NameCustomSection extends CustomSection {
                     }
                     break;
                 }
-                default: throw new Error('Unrecognized subsection');
+                default: throw new KWatError('Unrecognized subsection');
             }
         }
     }

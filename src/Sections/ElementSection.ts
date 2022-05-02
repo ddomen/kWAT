@@ -16,6 +16,7 @@
   */
 
 import { protect } from '../internal';
+import { KWatError } from '../errors';
 import { Expression } from '../Instructions';
 import { Section, SectionTypes } from './Section';
 import type { Module, WasmOptions } from '../Module';
@@ -172,7 +173,7 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
     public getFunctionIndices(mod: Module, pass?: boolean): number[] {
         let idxs = this.Functions.map(f => mod.TypeSection.indexOf(f));
         let wrong;
-        if (!pass && idxs.some(i => (wrong = i, i < 0))) { throw new Error('Invalid function definition index (at: ' + wrong + ')') }
+        if (!pass && idxs.some(i => (wrong = i, i < 0))) { throw new KWatError('Invalid function definition index (at: ' + wrong + ')') }
         return idxs;
     }
 
@@ -183,36 +184,36 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
      * @return {number[]} the index of the table or `-1` if not found
      */
     public getTableIndex(mod: Module, pass?: boolean): number {
-        if (!pass && !this.Table) { throw new Error('Invalid ElementSegment Table reference'); }
+        if (!pass && !this.Table) { throw new KWatError('Invalid ElementSegment Table reference'); }
         if (!this.Table) { return -1; }
         let idx = mod.TableSection.Tables.indexOf(this.Table);
-        if (!pass && idx < 0) { throw new Error('Invalid ElementSegment Table reference'); }
+        if (!pass && idx < 0) { throw new KWatError('Invalid ElementSegment Table reference'); }
         return idx;
     }
 
     public encode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         if (this.Mode > ElementMode.MAX || this.Mode < 0) {
-            throw new Error('Invalid Element Segment type [0x00, 0x07]: ' + this.Mode);
+            throw new KWatError('Invalid Element Segment type [0x00, 0x07]: ' + this.Mode);
         }
         encoder.uint8(this.Mode);
         let idxs, tid;
         switch (this.Mode) {
             case ElementMode.ActiveKind:
-                if (!this.Expression || !this.Functions.length) { throw new Error('Invalid ElementSegment[ActiveKind]'); }
+                if (!this.Expression || !this.Functions.length) { throw new KWatError('Invalid ElementSegment[ActiveKind]'); }
                 idxs = this.getFunctionIndices(mod);
                 encoder
                     .encode(this.Expression, mod, opts)
                     .vector(idxs, 'uint32');
                 break;
             case ElementMode.DeclarativeKind:
-                if (this.Kind === null || !this.Functions.length) { throw new Error('Invalid ElementSegment[DeclarativeKind]'); }
+                if (this.Kind === null || !this.Functions.length) { throw new KWatError('Invalid ElementSegment[DeclarativeKind]'); }
                 idxs = this.getFunctionIndices(mod);
                 encoder
                     .uint8(this.Kind)
                     .vector(idxs, 'uint32');
                 break;
             case ElementMode.ActiveKindTable:
-                if (!this.Expression || !this.Table || this.Kind === null || !this.Functions.length) { throw new Error('Invalid ElementSegment[ActiveKindTable]'); }
+                if (!this.Expression || !this.Table || this.Kind === null || !this.Functions.length) { throw new KWatError('Invalid ElementSegment[ActiveKindTable]'); }
                 tid = this.getTableIndex(mod)
                 idxs = this.getFunctionIndices(mod);
                 encoder
@@ -223,22 +224,22 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
                 ;
                 break;
             case ElementMode.PassiveKind:
-                if (this.Kind === null || !this.Functions.length) { throw new Error('Invalid ElementSegment[PassiveKind]'); }
+                if (this.Kind === null || !this.Functions.length) { throw new KWatError('Invalid ElementSegment[PassiveKind]'); }
                 idxs = this.getFunctionIndices(mod);
                 encoder.uint8(this.Kind).vector(idxs, 'uint32');
                 break;
             case ElementMode.ActiveType:
-                if (!this.Expression || !this.Initialization.length) { throw new Error('Invalid ElementSegment[ActiveType]'); }
+                if (!this.Expression || !this.Initialization.length) { throw new KWatError('Invalid ElementSegment[ActiveType]'); }
                 encoder.encode(this.Expression, mod, opts)
                         .vector(this.Initialization, mod, opts);
                 break;
             case ElementMode.DeclarativeType:
-                if (!this.Reference || !this.Initialization.length) { throw new Error('Invalid ElementSegment[DeclarativeType]'); }
+                if (!this.Reference || !this.Initialization.length) { throw new KWatError('Invalid ElementSegment[DeclarativeType]'); }
                 encoder.uint8(this.Reference)
                         .vector(this.Initialization, mod, opts);
                 break;
             case ElementMode.ActiveTypeTable:
-                if (!this.Table || !this.Expression || !this.Reference || !this.Initialization.length) { throw new Error('Invalid ElementSegment[ActiveTypeTable]'); }
+                if (!this.Table || !this.Expression || !this.Reference || !this.Initialization.length) { throw new KWatError('Invalid ElementSegment[ActiveTypeTable]'); }
                 tid = this.getTableIndex(mod);
                 encoder
                     .uint32(tid)
@@ -248,11 +249,11 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
                 ;
                 break;
             case ElementMode.PassiveType:
-                if (!this.Reference || !this.Initialization.length) { throw new Error('Invalid ElementSegment[PassiveType]'); }
+                if (!this.Reference || !this.Initialization.length) { throw new KWatError('Invalid ElementSegment[PassiveType]'); }
                 encoder.uint8(this.Reference)
                         .vector(this.Initialization, mod, opts);
                 break;
-            default: throw new Error('Invalid ElementSegment Type: ' + this.Mode)
+            default: throw new KWatError('Invalid ElementSegment Type: ' + this.Mode)
         }
     }
 
@@ -271,7 +272,7 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
                 idxs = decoder.vector('uint32');
                 segment.Functions.push(...idxs.map(id => mod.FunctionSection.Functions[id]!));
                 if (segment.Functions.some(f => !f)) {
-                    throw new Error('Invalid Element Segment function reference');
+                    throw new KWatError('Invalid Element Segment function reference');
                 }
                 break;
             case ElementMode.DeclarativeKind:
@@ -279,7 +280,7 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
                 idxs = decoder.vector('uint32');
                 segment.Functions.push(...idxs.map(id => mod.FunctionSection.Functions[id]!));
                 if (segment.Functions.some(f => !f)) {
-                    throw new Error('Invalid Element Segment function reference');
+                    throw new KWatError('Invalid Element Segment function reference');
                 }
                 break;
             case ElementMode.ActiveKindTable:
@@ -288,12 +289,12 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
                 segment.Kind = decoder.uint8();
                 idxs = decoder.vector('uint32');
                 if (!mod.TableSection.Tables[tid]) {
-                    throw new Error('Invalid Element Segment table reference');
+                    throw new KWatError('Invalid Element Segment table reference');
                 }
                 segment.Table = mod.TableSection.Tables[tid]!;
                 segment.Functions.push(...idxs.map(id => mod.FunctionSection.Functions[id]!));
                 if (segment.Functions.some(f => !f)) {
-                    throw new Error('Invalid Element Segment function reference');
+                    throw new KWatError('Invalid Element Segment function reference');
                 }
                 break;
             case ElementMode.PassiveKind:
@@ -301,7 +302,7 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
                 idxs = decoder.vector('uint32');
                 segment.Functions.push(...idxs.map(id => mod.FunctionSection.Functions[id]!));
                 if (segment.Functions.some(f => !f)) {
-                    throw new Error('Invalid Element Segment function reference');
+                    throw new KWatError('Invalid Element Segment function reference');
                 }
                 break;
             case ElementMode.ActiveType:
@@ -315,7 +316,7 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
             case ElementMode.ActiveTypeTable:
                 tid = decoder.uint32();
                 if (!mod.TableSection.Tables[tid]) {
-                    throw new Error('Invalid Element Segment table reference');
+                    throw new KWatError('Invalid Element Segment table reference');
                 }
                 segment.Table = mod.TableSection.Tables[tid]!;
                 segment.Expression = decoder.decode(Expression, mod);
@@ -326,7 +327,7 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
                 segment.Reference = decoder.uint8();
                 segment.Initialization.push(...decoder.vector(Expression, mod));
                 break;
-            default: throw new Error('Invalid ElementSegment Type: ' + type)
+            default: throw new KWatError('Invalid ElementSegment Type: ' + type)
         }
         return segment;
     }

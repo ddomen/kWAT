@@ -16,6 +16,7 @@
   */
 
 import { protect } from '../internal';
+import { KWatError } from '../errors';
 import { Section, SectionTypes } from './Section';
 import { FunctionType, Type, ValueType } from '../Types';
 import { Expression, Instruction } from '../Instructions';
@@ -68,7 +69,7 @@ export class CodeSegment implements IEncodable<[Module, WasmOptions]> {
     */
     public static decode(decoder: IDecoder, context: CodeSegmentContext): CodeSegment {
         if (!context.module.FunctionSection.Functions[context.index]) {
-            throw new Error('Invalid Code Segment function reference');
+            throw new KWatError('Invalid Code Segment function reference');
         }
         const len = decoder.uint32();
         const curr = decoder.remaining;
@@ -78,12 +79,12 @@ export class CodeSegment implements IEncodable<[Module, WasmOptions]> {
             n = decoder.uint32();
             for (let j = 0; j < n; ++j) {
                 l = decoder.uint8();
-                if (!(l in Type)) { throw new Error('Invalid Code Segment Local Type'); }
+                if (!(l in Type)) { throw new KWatError('Invalid Code Segment Local Type'); }
                 locals.push(l);
             }
         }
         let body = decoder.decode(Expression, context.module, context.options);
-        if (curr - decoder.remaining !== len) { throw new Error('Invalid Code Segment length'); }
+        if (curr - decoder.remaining !== len) { throw new KWatError('Invalid Code Segment length'); }
         return new CodeSegment(
             context.module.FunctionSection.Functions[context.index++]!,
             body.Instructions, locals as any[]
@@ -118,7 +119,7 @@ export class CodeSection extends Section<SectionTypes.code> {
     public add(signature: FunctionType, body?: Instruction[], locals?: ValueType[]): boolean
     public add(segment: FunctionType | CodeSegment, body: Instruction[]=[], locals: ValueType[]=[]): boolean {
         if (segment instanceof FunctionType) { segment = new CodeSegment(segment, body, locals); }
-        if (!(segment instanceof CodeSegment)) { throw new Error('Invalid Code Segment pushed'); }
+        if (!(segment instanceof CodeSegment)) { throw new KWatError('Invalid Code Segment pushed'); }
         if (this.Codes.some(cs => cs.Signature === (segment as CodeSegment).Signature)) { return false; }
         this.Codes.push(segment);
         return true;
@@ -128,7 +129,7 @@ export class CodeSection extends Section<SectionTypes.code> {
         if (
             this.Codes.length != mod.FunctionSection.Functions.length ||
             this.Codes.some((cs, i) => !cs.Signature.equals(mod.FunctionSection.Functions[i]))
-        ) { throw new Error('Code Section does not correspond to Function Section!'); }
+        ) { throw new KWatError('Code Section does not correspond to Function Section!'); }
         encoder.vector(this.Codes, mod, opts);
     }
 

@@ -16,6 +16,7 @@
   */
 
 import { protect } from '../internal';
+import { KWatError } from '../errors';
 import { Section, SectionTypes } from './Section';
 import type { IEncoder, IDecoder } from '../Encoding';
 
@@ -48,7 +49,7 @@ export abstract class CustomSection extends Section<SectionTypes.custom> {
     }
 
     protected contentEncode(encoder: IEncoder): void {
-        if (typeof(this.Name) !== 'string' || !this.Name) { throw new Error('Invalid Custom Section name: \'' + this.Name + '\'')}
+        if (typeof(this.Name) !== 'string' || !this.Name) { throw new KWatError('Invalid Custom Section name: \'' + this.Name + '\'')}
         encoder.vector(this.Name);
         this.encodeBytes(encoder);
     }

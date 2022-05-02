@@ -16,6 +16,7 @@
   */
 
 import { protect } from './internal';
+import { KWatError } from './errors';
 import { BuildingCallback, ModuleBuilder } from './Builder';
 import { IEncoder ,IDecoder, IEncodable, Relaxations } from './Encoding';
 import * as Sections from './Sections';
@@ -248,22 +249,23 @@ export class Module implements IEncodable<WasmOptions> {
      * @return {Module} the read module
     */
     public static decode(decoder: IDecoder): Module {
-        if (decoder.uint32(Relaxations.None) !== ModuleMagic) {
-            throw new Error('Invalid Module Magic');
+        const magic = decoder.uint32(Relaxations.None);
+        if (magic !== ModuleMagic) {
+            throw new KWatError('Invalid Module Magic: ' + magic + ' (' + ModuleMagic + ')');
         }
-        let m = new Module();
+        const m = new Module();
         m.Version = decoder.uint32(Relaxations.None);
-        let type: number, size, precedence = 0, slice,
-            sections: IDecoder[] = [];
+        let type: number, size: number, precedence: number = 0,
+            slice: IDecoder, sections: IDecoder[] = [];
         while (decoder.remaining) {
             type = decoder.uint8();
-            if (!(type in Sections.SectionTypes)) { throw new Error('Invalid Section type: ' + type); }
+            if (!(type in Sections.SectionTypes)) { throw new KWatError('Invalid Section type: ' + type); }
             size = decoder.uint32();
             slice = decoder.slice(size);
             if (type === Sections.SectionTypes.custom) {
                 m.CustomSections.push(Sections.CustomSection.decode(slice).after(precedence));
             }
-            else if (sections[type]) { throw new Error('Duplicated Section type: ' + type); }
+            else if (sections[type]) { throw new KWatError('Duplicated Section type: ' + type); }
             else {
                 precedence = type;
                 sections[type] = slice;
@@ -272,7 +274,7 @@ export class Module implements IEncodable<WasmOptions> {
         let section, modSects = m.Sections;
         for (let i in sections) {
             section = modSects.find(s => s.Type == parseInt(i));
-            if (!section) { throw new Error('Module Section not found: ' + i); }
+            if (!section) { throw new KWatError('Module Section not found: ' + i); }
             section.decode(sections[i]!, m);
         }
         return m;

@@ -16,6 +16,7 @@
   */
 
 import { OpCodes } from '../../OpCodes';
+import { KWatError } from '../../errors';
 import { AbstractCallInstruction } from './AbstractCallInstruction';
 import type { IDecoder, IEncoder } from '../../Encoding';
 import type { ExpressionEncodeContext, StackEdit } from '../Instruction';
@@ -30,18 +31,18 @@ export class ReturnCallInstruction extends AbstractCallInstruction<OpCodes.retur
     }
     public getFunctionIndex(context: ExpressionEncodeContext, pass?: boolean): number {
         let index = context.module.TypeSection.indexOf(this.Function);
-        if(!pass && index < 0) { throw new Error('Call Instruction invalid function reference'); }
+        if(!pass && index < 0) { throw new KWatError('Call Instruction invalid function reference'); }
         return index;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
-        if (!context.options.tailCall) { throw new Error('Tail call detected'); }
+        if (!context.options.tailCall) { throw new KWatError('Tail call detected'); }
         let index = this.getFunctionIndex(context);
         super.encode(encoder, context);
         encoder.uint32(index);
     }
     public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): ReturnCallInstruction {
         let index = decoder.uint32();
-        if (!context.module.FunctionSection.Functions[index]) { throw new Error('Call Instruction invalid function reference'); }
+        if (!context.module.FunctionSection.Functions[index]) { throw new KWatError('Call Instruction invalid function reference'); }
         return new ReturnCallInstruction(context.module.FunctionSection.Functions[index]!);
     }
 }

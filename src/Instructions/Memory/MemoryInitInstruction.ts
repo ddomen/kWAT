@@ -16,6 +16,7 @@
   */
 
 import { protect } from '../../internal';
+import { KWatError } from '../../errors';
 import { MemoryType, Type } from '../../Types';
 import { OpCodes, OpCodesExt1 } from '../../OpCodes';
 import { AbstractMemoryInstruction } from './AbstractMemoryInstruction';
@@ -36,19 +37,19 @@ export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.op_
     }
     public getDataIndex(context: ExpressionEncodeContext, pass?: boolean): number {
         let index = context.module.DataSection.Datas.indexOf(this.Data);
-        if (!pass && index < 0) { throw new Error('Memory Init Instruction invalid data reference'); }
+        if (!pass && index < 0) { throw new KWatError('Memory Init Instruction invalid data reference'); }
         return index;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
-        if (!context.options.bulkMemory) { throw new Error('Bulk memory instruction detected'); }
+        if (!context.options.bulkMemory) { throw new KWatError('Bulk memory instruction detected'); }
         let index = this.getDataIndex(context);
         let mem = 0;
         if (this.Memory) {
             mem = context.module.MemorySection.indexOf(this.Memory);
             if (mem === -1) { mem = context.module.ImportSection.indexOf(this.Memory)}
-            if (mem === -1) { throw new Error('Memory index not found: ' + this.Memory); }
+            if (mem === -1) { throw new KWatError('Memory index not found: ' + this.Memory); }
         }
-        if (mem && !context.options.multipleMemory) { throw new Error('Multiple memory detected'); }
+        if (mem && !context.options.multipleMemory) { throw new KWatError('Multiple memory detected'); }
         super.encode(encoder, context);
         encoder.uint32(this.OperationCode)
                 .uint32(index)
@@ -57,9 +58,9 @@ export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.op_
 
     public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): MemoryInitInstruction {
         let index = decoder.uint32();
-        if (!context.module.DataSection.Datas[index]) { throw new Error('Memory Init Instruction invalid data reference'); }
+        if (!context.module.DataSection.Datas[index]) { throw new KWatError('Memory Init Instruction invalid data reference'); }
         let b;
-        if ((b = decoder.uint8()) !== 0x00) { throw new Error('Memory Init Instruction unexpected closing byte: 0x' + Number(b).toString(16)); }
+        if ((b = decoder.uint8()) !== 0x00) { throw new KWatError('Memory Init Instruction unexpected closing byte: 0x' + Number(b).toString(16)); }
         return new MemoryInitInstruction(context.module.DataSection.Datas[index]!)
     }
 }

@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+import { KWatError } from '../../errors';
 import { ExpressionEncodeContext, Instruction, InstructionCtor } from '../Instruction';
 import type { OpCodes } from '../../OpCodes';
 import type { IDecoder, IEncoder } from '../../Encoding';
@@ -39,7 +40,7 @@ export abstract class AbstractBranchInstruction<O extends BranchInstructionCodes
     ): AbstractBranchInstruction {
         super.decode(decoder, context);
         let label = decoder.uint32();
-        if (!context.blocks[label]) { throw new Error('Encountered an invalid label'); }
+        if (!context.blocks[label]) { throw new KWatError('Encountered an invalid label'); }
         return new this(context.blocks[label]!);
     }
 }

@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+import { KWatError } from '../errors';
 import type { Module } from '../Module';
 
 /** Parser interface, define an object that can parse a string into a module */
@@ -40,7 +41,7 @@ const Throw = {
     EOF(): never { throw this.ParserError('Unexpected input end'); },
     EmptyExpression(state?: State): never { throw this.ParserError('Empty Expression', state); },
     InvalidExpression(state?: State): never { throw this.ParserError('Invalid Expression', state); },
-    InvalidArgument(message: string, name?: string): never { throw new Error(message + (name ? '(arg: ' + name + ')' : '')); }
+    InvalidArgument(message: string, name?: string): never { throw new KWatError(message + (name ? '(arg: ' + name + ')' : '')); }
 }
 
 function isSpace(char: string): boolean { return !!char.match(/\s/); }

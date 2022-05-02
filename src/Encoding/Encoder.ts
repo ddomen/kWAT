@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+import { KWatError } from '../errors';
 import { EncodeType, NumericArray, Relaxation, Relaxations } from './Relaxations';
 
 const zeros = '00000000000000000000000000000000';
@@ -278,7 +279,7 @@ function enc_u_leb128(bits: string | number, buffer: number[], maxBitSize?: numb
         bits = shift(bits);
         if (!zero(bits)) { byte |= 0x80; }
         buffer.push(byte);
-        if ((i += 7) > maxBitSize) { throw new Error('Unsigned Int to encode (LEB128) is bigger than expected (' + maxBitSize + ')'); }
+        if ((i += 7) > maxBitSize) { throw new KWatError('Unsigned Int to encode (LEB128) is bigger than expected (' + maxBitSize + ')'); }
     }
     while (byte & 0x80);
 }
@@ -312,7 +313,7 @@ function enc_s_leb128(bits: string | number, buffer: number[], maxBitSize?: numb
             (n1(bits)   &&  (byte & 0x40))
         ) { buffer.push(byte); break; }
         buffer.push(byte | 0x80);
-        if ((i += 7) > maxBitSize) { throw new Error('Unsigned Int to encode (LEB128) is bigger than expected (' + maxBitSize + ')'); }
+        if ((i += 7) > maxBitSize) { throw new KWatError('Unsigned Int to encode (LEB128) is bigger than expected (' + maxBitSize + ')'); }
     }
 }
 
@@ -486,7 +487,7 @@ export class Encoder implements IEncoder {
         switch (relaxed || this.relaxation) {
             case Relaxations.Full:
             case Relaxations.None:
-                throw new Error('Not yet implemented');
+                throw new KWatError('Not yet implemented');
             case Relaxations.Canonical:
             default: enc_s_leb128(value, this._data, 64); break;
         }
@@ -524,16 +525,16 @@ export class Encoder implements IEncoder {
         let ftype = typeof(value[0]);
         if (ftype === 'object') {
             if (value.some(v => typeof(v) !== 'object' || typeof(v.encode) != 'function')) {
-                throw new Error('Unable to encode non-numeric/non-string/non-compilable/mixed vector');
+                throw new KWatError('Unable to encode non-numeric/non-string/non-compilable/mixed vector');
             }
             value.forEach(v => this.encode(v as IEncodable<any[]>, type as any, ...args));
             return this;
         }
         if (value.map(v => typeof(v)).some(v => (v !== 'number' && v !== 'string') || v !== ftype)) {
-            throw new Error('Unable to encode non-numeric/non-string/non-compilable/mixed vector');
+            throw new KWatError('Unable to encode non-numeric/non-string/non-compilable/mixed vector');
         }
         if (ftype === 'string') { value.forEach(v => this.utf8(v as string)); return this; }
-        else if (!type || !(type in this)) { throw new Error('Invalid encoding type for vector: \'' + type + '\''); }
+        else if (!type || !(type in this)) { throw new KWatError('Invalid encoding type for vector: \'' + type + '\''); }
         if (type === 'uint64') { value.forEach(v => this.uint64(v as number)); }
         else {
             let cb = this[type as EncodeType].bind(this);

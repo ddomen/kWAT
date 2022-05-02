@@ -15,8 +15,9 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
-import { MemoryType, Type } from '../../Types';
 import { protect } from '../../internal';
+import { KWatError } from '../../errors';
+import { MemoryType, Type } from '../../Types';
 import { OpCodes, OpCodesExt1 } from '../../OpCodes';
 import { MemoryManagementInstruction } from './MemoryManagementInstruction';
 import type { ExpressionEncodeContext, StackEdit } from '../Instruction';
@@ -35,7 +36,7 @@ export class MemoryFillInstruction extends MemoryManagementInstruction<OpCodes.o
         encoder.uint32(this.OperationCode);
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
-        if (!context.options.bulkMemory) { throw new Error('Bulk memory instruction detected'); }
+        if (!context.options.bulkMemory) { throw new KWatError('Bulk memory instruction detected'); }
         super.encode(encoder, context);
     }
     public static readonly instance = new MemoryFillInstruction();

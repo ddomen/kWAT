@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+import { KWatError } from '../errors';
 import { ExpressionBuilder } from './ExpressionBuilder';
 import * as Types from '../Types'
 import * as Expression from '../Instructions'
@@ -96,7 +97,7 @@ export class FunctionBuilder implements IBuilder<FunctionDefinition> {
         types.unshift(type)
         types.forEach(t => {
             if (typeof(t) === 'string') { t = Types.Type[t] || t; }
-            if (!Types.validValue(t)) { throw new Error('Invalid parameter Type: ' + t); }
+            if (!Types.validValue(t)) { throw new KWatError('Invalid parameter Type: ' + t); }
             this._parameters.push(t);
         });
         return this;
@@ -109,7 +110,7 @@ export class FunctionBuilder implements IBuilder<FunctionDefinition> {
      */
     public result(type: Types.ValueType | Types.ValueTypeKey): this {
         if (typeof(type) === 'string') { type = Types.Type[type] || type; }
-        if (!Types.validValue(type)) { throw new Error('Invalid result Type: ' + type); }
+        if (!Types.validValue(type)) { throw new KWatError('Invalid result Type: ' + type); }
         this._results.push(type);
         return this;
     }
@@ -129,7 +130,7 @@ export class FunctionBuilder implements IBuilder<FunctionDefinition> {
      * @return {number} the index of the local variable
      */
     public checkLocal(index: number | string): number {
-        if (!this.hasLocal(index)) { throw new Error('Undefined local variable: \'' + index + '\''); }
+        if (!this.hasLocal(index)) { throw new KWatError('Undefined local variable: \'' + index + '\''); }
         return typeof(index) === 'string' ? this.local(index) : index;
     }
 
@@ -148,13 +149,13 @@ export class FunctionBuilder implements IBuilder<FunctionDefinition> {
     public local(name: string, type?: Types.ValueType | Types.ValueTypeKey | boolean): this | number {
         if (typeof(type) === 'undefined' || typeof(type) === 'boolean') {
             const i = Object.keys(this._locals).indexOf(name);
-            if (i === -1 && !type) { throw new Error('Undefined local variable: \'' + name + '\''); }
+            if (i === -1 && !type) { throw new KWatError('Undefined local variable: \'' + name + '\''); }
             return i;
         }
         if (typeof(type) === 'string') { type = Types.Type[type] || type; }
-        if (!Types.validValue(type)) { throw new Error('Invalid local Type: ' + type); }
+        if (!Types.validValue(type)) { throw new KWatError('Invalid local Type: ' + type); }
         name = '' + name;
-        if (name in this._locals) { throw new Error('Function Builder local variable \'' + name + '\' already defined')}
+        if (name in this._locals) { throw new KWatError('Function Builder local variable \'' + name + '\' already defined')}
         this._locals[name] = type;
         return this;
     }
@@ -189,7 +190,7 @@ export class FunctionBuilder implements IBuilder<FunctionDefinition> {
         instructions.forEach(i => {
             if (!(i instanceof Expression.Instruction)) {
                 if ('instance' in i && i.instance instanceof Expression.Instruction) { i = i.instance; }
-                else { throw new Error('Invalid body expression: ' + i); }
+                else { throw new KWatError('Invalid body expression: ' + i); }
             }
             this._body.push(i);
         })

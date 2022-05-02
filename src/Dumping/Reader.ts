@@ -17,6 +17,7 @@
 
 import { Type } from '../Types';
 import { protect } from '../internal';
+import { KWatError } from '../errors';
 import { ExchangeDescriptionCode, SectionTypes } from '../Sections';
 import { Decoder, IDecoder } from '../Encoding';
 import { OpCodes, OpCodesExt1, OpCodesExt2 } from '../OpCodes';
@@ -291,7 +292,7 @@ export class Reader {
     private _parseMagic(): string {
         return this._autoEmit('magic', () => {
             const magic = this._decoder.utf8(4);
-            if (magic !== '\0asm') { throw new Error('Invalid wasm binary magic: ' + magic); } 
+            if (magic !== '\0asm') { throw new KWatError('Invalid wasm binary magic: ' + magic); } 
             return magic;
         }, '#magic', 'The encoding of a module starts with a preamble containing a 4-byte magic number (the string \'\\0asm\')', '\\0asm');
     }

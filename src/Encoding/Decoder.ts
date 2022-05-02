@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+import { KWatError } from '../errors';
 import { EncodeType, Relaxation, Relaxations } from './Relaxations';
 
 const zeros = '00000000000000000000000000000000';
@@ -161,7 +162,7 @@ function dec_u_leb128(decoder: IDecoder, maxBitSize?: number): number {
         result |= (byte & 0x7f) << shift;
         if (!(byte & 0x80)) { return result; }
         shift += 7;
-        if ((i += 7) > maxBitSize) { throw new Error('Unsigned Int to decode (LEB128) is bigger than expected (' + maxBitSize + ')'); }
+        if ((i += 7) > maxBitSize) { throw new KWatError('Unsigned Int to decode (LEB128) is bigger than expected (' + maxBitSize + ')'); }
     }
 }
 function dec_s_leb128(decoder: IDecoder, maxBitSize?: number): number {
@@ -171,7 +172,7 @@ function dec_s_leb128(decoder: IDecoder, maxBitSize?: number): number {
         byte = decoder.uint8();
         result |= (byte & 0x7f) << shift;
         shift += 7;
-        if (shift >= maxBitSize) { throw new Error('Signed Int to decode (LEB128) is bigger than expected (' + maxBitSize + ')'); }
+        if (shift >= maxBitSize) { throw new KWatError('Signed Int to decode (LEB128) is bigger than expected (' + maxBitSize + ')'); }
         if (!(byte & 0x80)) { return result | ((byte & 0x40) ? (-1 << shift) : 0x0); }
     }
 }
@@ -185,7 +186,7 @@ export class Decoder implements IDecoder {
     public get remaining(): number { return this._view.byteLength - this._offset; }
     public get offset(): number { return this._offset; }
     public set offset(value: number) {
-        if (value < 0 || value >= this._view.byteLength) { throw new Error('Offset out of range'); }
+        if (value < 0 || value >= this._view.byteLength) { throw new KWatError('Offset out of range'); }
         this._offset = value;
     }
     public relaxation: Relaxation = Relaxations.Canonical;
