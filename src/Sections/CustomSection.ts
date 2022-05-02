@@ -22,26 +22,48 @@ import type { IEncoder, IDecoder } from '../Encoding';
 
 type CustomSectionCtor = { new(name: string): CustomSection };
 export abstract class CustomSection extends Section<SectionTypes.custom> {
+    /** The name of the custom section */
     public readonly Name!: string;
 
     public override set precedence(value: number) { this._precedence = value; }
 
-    protected constructor(name?: string, readonly: boolean=true) {
+    /** Create an empty custom section
+     * @param {string} name the name of the custom section
+     * @param {boolean} [readonly=true] wheter the section can be written or not
+     */
+    protected constructor(name: string, readonly: boolean=true) {
         super(SectionTypes.custom);
         if (readonly) { protect(this, 'Name', (name || '') + '', true); }
         else { this.Name = name || ''; }
     }
 
+    /** Set the precedence of the custom section to be
+     * just a little bit greater than the precedence of another given section
+     * @param {(SectionTypes|Section)} type the other section 
+     * @param {number} [offset=0] offset to given to the other section precedence
+     * @returns {this} the custom section itself (chainable method)
+     */
     public after(type: SectionTypes | Section<any>): this {
         return this.like(type, 0.1);
     }
+    /** Set the precedence of the custom section to be
+     * just a little bit lesser than the precedence of another given section
+     * @param {(SectionTypes|Section)} type the other section 
+     * @param {number} [offset=0] offset to given to the other section precedence
+     * @returns {this} the custom section itself (chainable method)
+     */
     public before(type: SectionTypes | Section<any>): this {
         return this.like(type, -0.1);
     }
+    /** Set the precedence of the custom section to be
+     * like the precedence of another given section
+     * @param {(SectionTypes|Section)} type the other section 
+     * @param {number} [offset=0] offset to given to the other section precedence
+     * @returns {this} the custom section itself (chainable method)
+     */
     public like(type: SectionTypes | Section<any>, offset: number = 0): this {
         if (typeof(type) === 'number') {
             if (type === SectionTypes.data) { type = SectionTypes.dataCount; }
-            else if (type === SectionTypes.dataCount) { type = SectionTypes.dataCount; }
             this._precedence = type + offset;
         }
         else { this._precedence = type.precedence + offset; }
@@ -61,6 +83,10 @@ export abstract class CustomSection extends Section<SectionTypes.custom> {
     protected abstract encodeBytes(encoder: IEncoder): void;
     protected abstract decodeBytes(decoder: IDecoder): void;
 
+    /** Reads and decode a custom section from a decoder
+     * @param {IDecoder} decoder the target decoder
+     * @returns {CustomSection} the read custom section
+     */
     public static decode(decoder: IDecoder): CustomSection {
         let name = decoder.vector('utf8');
         let type =  CustomSection._customTypes[('' + name).toLowerCase()];
@@ -70,7 +96,18 @@ export abstract class CustomSection extends Section<SectionTypes.custom> {
 
     private static readonly _customTypes: { [key: string]: CustomSectionCtor } = { };
 
+    /** Associate the current section type to be the default reader
+     * of a custom section when the given name is encountered
+     * @param {string} name the name to associate with
+     * @returns {void}
+     */
     public static registerCustomType(this: CustomSectionCtor, name: string): void;
+    /** Associate given current section type to be the default reader
+     * of a custom section when the given name is encountered
+     * @param {string} name the name to associate with
+     * @param {CustomSectionCtor} type the section type to associate with the name
+     * @returns {void}
+     */
     public static registerCustomType(this: typeof CustomSection, name: string, type: CustomSectionCtor): void;
     public static registerCustomType(name: string, type?: CustomSectionCtor): void {
         if (this === CustomSection && !type) { throw new TypeError('Missing second argument (type)'); }
