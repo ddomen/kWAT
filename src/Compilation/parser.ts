@@ -30,7 +30,7 @@ type SExpression = (string | SExpression)[];
 
 const Throw = {
     ParserError(message: string, state?: State): Error {
-        return new Error(message + (state ? (' (' + state.line + ', ' + state.column + ')') : ''));
+        return new KWatError(message + (state ? (' (' + state.line + ', ' + state.column + ')') : ''));
     },
     Character(given: string, expected: string, state?: State): never {
         throw this.ParserError(

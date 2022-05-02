@@ -16,8 +16,8 @@
   */
 
 import { protect } from '../../internal';
-import { KWatError } from '../../errors';
 import { OpCodes, OpCodesExt1 } from '../../OpCodes';
+import { KWatError, UnsupportedExtensionError } from '../../errors';
 import { AbstractMemoryInstruction } from './AbstractMemoryInstruction';
 import type { DataSegment } from '../../Sections';
 import type { ExpressionEncodeContext } from '../Instruction';
@@ -37,7 +37,7 @@ export class DataDropInstruction extends AbstractMemoryInstruction<OpCodes.op_ex
         return index;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
-        if (!context.options.bulkMemory) { throw new KWatError('Bulk memory instruction detected'); }
+        if (!context.options.bulkMemory) { throw new UnsupportedExtensionError('bulk memory'); }
         let index = this.getDataIndex(context);
         super.encode(encoder, context);
         encoder.uint32(this.OperationCode).uint32(index);

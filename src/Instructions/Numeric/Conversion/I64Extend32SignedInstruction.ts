@@ -17,7 +17,7 @@
 
 import { Type } from '../../../Types';
 import { OpCodes } from '../../../OpCodes';
-import { KWatError } from '../../../errors';
+import { UnsupportedExtensionError } from '../../../errors';
 import { AbstractNumericInstruction } from '../AbstractNumericInstruction';
 import type { IEncoder } from '../../../Encoding';
 import type { ExpressionEncodeContext, StackEdit } from '../../Instruction';
@@ -26,7 +26,7 @@ export class I64Extend32SignedInstruction extends AbstractNumericInstruction<OpC
     public override get stack(): StackEdit { return [ [ Type.i64 ], [ Type.i64 ] ] }
     private constructor() { super(OpCodes.i64_extend32_s); }
     public override encode(encoder: IEncoder, ctx: ExpressionEncodeContext): void {
-        if (!ctx.options.signExtension) { throw new KWatError('Sign extension instruction detected'); }
+        if (!ctx.options.signExtension) { throw new UnsupportedExtensionError('sign extension'); }
         super.encode(encoder, ctx);
     }
     public static readonly instance = new I64Extend32SignedInstruction();

@@ -15,8 +15,8 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
-import { KWatError } from '../../errors';
 import { protect } from '../../internal';
+import { KWatError } from '../../errors';
 import { OpCodes, OpCodesExt1 } from '../../OpCodes';
 import { AbstractTableInstruction } from './AbstractTableInstruction';
 import type { IEncoder } from '../../Encoding';

@@ -16,7 +16,7 @@
   */
 
 import { OpCodes } from '../../OpCodes';
-import { KWatError } from '../../errors';
+import { KWatError, UnsupportedExtensionError } from '../../errors';
 import { AbstractCallInstruction } from './AbstractCallInstruction';
 import type { IDecoder, IEncoder } from '../../Encoding';
 import type { ExpressionEncodeContext, StackEdit } from '../Instruction';
@@ -35,7 +35,7 @@ export class ReturnCallInstruction extends AbstractCallInstruction<OpCodes.retur
         return index;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
-        if (!context.options.tailCall) { throw new KWatError('Tail call detected'); }
+        if (!context.options.tailCall) { throw new UnsupportedExtensionError('tail call'); }
         let index = this.getFunctionIndex(context);
         super.encode(encoder, context);
         encoder.uint32(index);

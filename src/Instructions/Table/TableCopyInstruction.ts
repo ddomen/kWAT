@@ -15,10 +15,10 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
-import { KWatError } from '../../errors';
 import { TableType, Type } from '../../Types';
 import { TableInstruction } from './TableInstruction';
 import { OpCodes, OpCodesExt1 } from '../../OpCodes';
+import { KWatError, UnsupportedExtensionError } from '../../errors';
 import type { IDecoder, IEncoder } from '../../Encoding';
 import type { ExpressionDecodeContext, ExpressionEncodeContext, StackEdit } from '../Instruction';
 
@@ -37,7 +37,7 @@ export class TableCopyInstruction extends TableInstruction<OpCodesExt1.table_cop
         return index;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
-        if (!context.options.bulkMemory) { throw new KWatError('Bulk memory instruction detected'); }
+        if (!context.options.bulkMemory) { throw new UnsupportedExtensionError('bulk memory'); }
         let dst = this.getDestinationIndex(context),
             src = this.getTableIndex(context);
         super.encode(encoder, context);

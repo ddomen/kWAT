@@ -16,7 +16,7 @@
   */
 
 import { OpCodes } from '../../OpCodes';
-import { KWatError } from '../../errors';
+import { KWatError, UnsupportedExtensionError } from '../../errors';
 import { AbstractCallInstruction } from './AbstractCallInstruction';
 import * as Types from '../../Types';
 import type { IDecoder, IEncoder } from '../../Encoding';
@@ -53,7 +53,7 @@ export class ReturnCallIndirectInstruction extends AbstractCallInstruction<OpCod
         encoder.uint32(tid).uint32(xid);
     }
     public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): ReturnCallIndirectInstruction {
-        if (!context.options.tailCall) { throw new KWatError('Tail call detected'); }
+        if (!context.options.tailCall) { throw new UnsupportedExtensionError('tail call'); }
         let type = decoder.uint32();
         if (!context.module.TypeSection.Types[type]) { throw new KWatError('Call Indirect Instruction invalid type reference'); }
         let table = decoder.uint32();

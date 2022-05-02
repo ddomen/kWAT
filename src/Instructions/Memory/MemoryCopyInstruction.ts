@@ -16,9 +16,9 @@
   */
 
 import { protect } from '../../internal';
-import { KWatError } from '../../errors';
 import { MemoryType, Type } from '../../Types';
 import { OpCodes, OpCodesExt1 } from '../../OpCodes';
+import { UnsupportedExtensionError } from '../../errors';
 import { AbstractMemoryInstruction } from './AbstractMemoryInstruction';
 import type { ExpressionEncodeContext, StackEdit } from '../Instruction';
 import type { IEncoder } from '../../Encoding';
@@ -35,7 +35,7 @@ export class MemoryCopyInstruction extends AbstractMemoryInstruction<OpCodes.op_
         this.Destination = destination || null;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
-        if (!context.options.bulkMemory) { throw new KWatError('Bulk memory instruction detected'); }
+        if (!context.options.bulkMemory) { throw new UnsupportedExtensionError('bulk memory'); }
         super.encode(encoder, context);
         encoder.uint32(this.OperationCode)
                 .uint32(this._memoryIndex(this.Source, context))

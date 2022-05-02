@@ -15,7 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
-import { KWatError } from '../../errors';
+import { KWatError, UnsupportedExtensionError } from '../../errors';
 import { ExpressionEncodeContext, Instruction } from '../Instruction';
 import type { OpCodes } from '../../OpCodes';
 import type { MemoryType } from '../../Types';
@@ -40,7 +40,7 @@ export abstract class AbstractMemoryInstruction<O extends MemoryInstructionCodes
             if (mem === -1) { mem = context.module.ImportSection.indexOf(memory)}
             if (mem === -1) { throw new KWatError('Memory index not found: ' + memory); }
         }
-        if (mem && !context.options.multipleMemory) { throw new KWatError('Multiple memory detected'); }
+        if (mem && !context.options.multipleMemory) { throw new UnsupportedExtensionError('multiple memory'); }
         return mem;
     }
 

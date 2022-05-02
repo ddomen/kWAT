@@ -16,9 +16,9 @@
   */
 
 import { protect } from '../../internal';
-import { KWatError } from '../../errors';
 import { MemoryType, Type } from '../../Types';
 import { OpCodes, OpCodesExt1 } from '../../OpCodes';
+import { KWatError, UnsupportedExtensionError } from '../../errors';
 import { AbstractMemoryInstruction } from './AbstractMemoryInstruction';
 import type { DataSegment } from '../../Sections';
 import type { IDecoder, IEncoder } from '../../Encoding';
@@ -41,7 +41,7 @@ export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.op_
         return index;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
-        if (!context.options.bulkMemory) { throw new KWatError('Bulk memory instruction detected'); }
+        if (!context.options.bulkMemory) { throw new UnsupportedExtensionError('bulk memory'); }
         let index = this.getDataIndex(context);
         let mem = 0;
         if (this.Memory) {
@@ -49,7 +49,7 @@ export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.op_
             if (mem === -1) { mem = context.module.ImportSection.indexOf(this.Memory)}
             if (mem === -1) { throw new KWatError('Memory index not found: ' + this.Memory); }
         }
-        if (mem && !context.options.multipleMemory) { throw new KWatError('Multiple memory detected'); }
+        if (mem && !context.options.multipleMemory) { throw new UnsupportedExtensionError('multiple memory'); }
         super.encode(encoder, context);
         encoder.uint32(this.OperationCode)
                 .uint32(index)

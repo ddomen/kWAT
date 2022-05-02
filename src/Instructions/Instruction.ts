@@ -54,7 +54,7 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
         if (!Array.isArray(stack)) { throw new TypeError('First argument must be a ResultType (Array<ValueType>)'); }
         let wrong!: [number, number];
         if (stack.some((n, i) => (wrong = [n, i], !Types.validValue(n)))) {
-            throw new TypeError('Invalid ValueType in params: 0x' + Number(wrong[0]).toString(16) + ' (index: ' + wrong[1] + ')');
+            throw new KWatError('Invalid ValueType in params: 0x' + Number(wrong[0]).toString(16) + ' (index: ' + wrong[1] + ')');
         }
         let stackEdit = this.stack;
         let stackOp = stack.slice();
@@ -148,7 +148,7 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
         }
         let wrong!: [ boolean, number, number ];
         if (stack.some((s, x) => (s as Types.ResultType).some((v, i) => (wrong = [ !!x, v, i ], !Types.validValue(v))))) {
-            throw new TypeError(
+            throw new KWatError(
                 'Invalid ValueType in ' + (wrong[0] ? 'Results' : 'Parameters') +
                 ': 0x' + Number(wrong[1]).toString(16) + ' (index: ' + wrong[2] + ')'
             );
