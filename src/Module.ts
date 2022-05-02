@@ -251,7 +251,7 @@ export class Module implements IEncodable<WasmOptions> {
     public static decode(decoder: IDecoder): Module {
         const magic = decoder.uint32(Relaxations.None);
         if (magic !== ModuleMagic) {
-            throw new KWatError('Invalid Module Magic: ' + magic + ' (' + ModuleMagic + ')');
+            throw new KWatError('Invalid Module Magic: 0x' + magic.toString(16) + ' (0x' + ModuleMagic.toString(16) + ')');
         }
         const m = new Module();
         m.Version = decoder.uint32(Relaxations.None);
