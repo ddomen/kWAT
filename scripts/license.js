@@ -6,7 +6,7 @@ function unicorn(str, options) {
     return str.replace(/\{\{(\S+?)\}\}/g, (_, g) => options[g]);
 }
 
-const hasLicense = /\s*\/\*(\s*\*\s*)+Copyright/;
+const hasLicense = /\s*\/\*\*(\s*\*\s*)+([^\n]*)Copyright/;
 const getLicense = /^\s*\/\*(\s*\*[^\n]*)*Copyright\s*[^\n]*(\s*\*[^\n]+)*\s*\*\/\s*/g;
 
 function makeLicense(filename, license, data, options) {
