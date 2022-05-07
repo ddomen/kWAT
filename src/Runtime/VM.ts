@@ -133,16 +133,16 @@ class KWModulePoly implements WebAssembly.Module {
     public constructor(buffer: ArrayBuffer) {
         protect(this, 'buffer', buffer);
         protect(this, 'module', decompile(new Uint8Array(this.buffer)));
-        protect(this, 'exports', this.module.ExportSection.Exports.map(e => ({
-            name: e.Name,
+        protect(this, 'exports', this.module.exportSection.exports.map(e => ({
+            name: e.name,
             kind: ExchangeDescriptionCode[e.code] as WebAssembly.ImportExportKind
         })));
-        protect(this, 'imports', this.module.ImportSection.Imports.map(i => ({
+        protect(this, 'imports', this.module.importSection.imports.map(i => ({
             kind: ExchangeDescriptionCode[i.code] as WebAssembly.ImportExportKind,
-            module: i.Module,
-            name: i.Name
+            module: i.module,
+            name: i.name
         })));
-        protect(this, 'customSections', this.module.CustomSections.reduce((a, cs) => a[cs.Name] = [], {} as any));
+        protect(this, 'customSections', this.module.customSections.reduce((a, cs) => a[cs.name] = [], {} as any));
         const r = new Reader(buffer);
         r.on('section.custom', cs => {
             const d = new Decoder(cs.value.data);
@@ -191,13 +191,13 @@ class KWInstancePoly implements WebAssembly.Instance {
             }
         }
         protect(this, 'functions', []);
-        this.module.module.ImportSection.Imports.forEach(i => {
+        this.module.module.importSection.imports.forEach(i => {
             if (i.isFunction()) {
-                const m = this.imports[i.Module];
-                if (!m) { throw new KWatError('Missing imported module: "' + i.Module + '"'); }
-                const v = m[i.Name];
-                if (!v) { throw new KWatError('Missing imported function: "' + i.Module + '"'); }
-                if (typeof(v) !== 'function') { throw new KWatError('Expecting import to be a function: "' + i.Module + '.' + i.Name + '"'); }
+                const m = this.imports[i.module];
+                if (!m) { throw new KWatError('Missing imported module: "' + i.module + '"'); }
+                const v = m[i.name];
+                if (!v) { throw new KWatError('Missing imported function: "' + i.module + '"'); }
+                if (typeof(v) !== 'function') { throw new KWatError('Expecting import to be a function: "' + i.module + '.' + i.name + '"'); }
                 this.functions.push(v);
             }
         });
@@ -206,45 +206,45 @@ class KWInstancePoly implements WebAssembly.Instance {
         // });
 
         protect(this, 'memories',
-            this.module.module.ImportSection.Imports
+            this.module.module.importSection.imports
             .filter(i => i.isMemory())
-            .map(i => i.Description as MemoryType)
-            .concat(this.module.module.MemorySection.Memories)
+            .map(i => i.description as MemoryType)
+            .concat(this.module.module.memorySection.memories)
             .map(m => new KWMemoryPoly({
-                initial: m.Min,
-                maximum: m.Max
+                initial: m.min,
+                maximum: m.max
             }))
         );
 
         protect(this, 'tables',
-            this.module.module.ImportSection.Imports
+            this.module.module.importSection.imports
             .filter(i => i.isTable())
-            .map(i => i.Description as TableType)
-            .concat(this.module.module.TableSection.Tables)
+            .map(i => i.description as TableType)
+            .concat(this.module.module.tableSection.tables)
             .map(t => new KWTablePoly({
-                element: Type[t.Reference] as WebAssembly.TableKind,
-                initial: t.Limits.Min,
-                maximum: t.Limits.Max
+                element: Type[t.reference] as WebAssembly.TableKind,
+                initial: t.limits.min,
+                maximum: t.limits.max
             }))
         );
 
         protect(this, 'globals',
-            this.module.module.ImportSection.Imports
+            this.module.module.importSection.imports
             .filter(i => i.isGlobal())
-            .map(i => i.Description as GlobalType)
+            .map(i => i.description as GlobalType)
             .concat(
-                this.module.module.GlobalSection.Globals
-                .map(g => g.Variable)
+                this.module.module.globalSection.globals
+                .map(g => g.variable)
             )
             .map(g => new KWGlobalPoly({
-                value: Type[g.Type] as WebAssembly.ValueType,
-                mutable: !g.Constant
+                value: Type[g.type] as WebAssembly.ValueType,
+                mutable: !g.constant
             }))
         );
 
         protect(this, 'tags', 
-            this.module.module.ImportSection.Imports.filter(i => (i.code as number) === 0x04)
-            .map(i => i.Description as any)
+            this.module.module.importSection.imports.filter(i => (i.code as number) === 0x04)
+            .map(i => i.description as any)
             .map(t => new KWTagPoly({ parameters: t.Parameters }))
         );
     }

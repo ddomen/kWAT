@@ -31,3 +31,15 @@ export function protect<T, K extends keyof T>(target: T, key: K, value: T[K], en
         writable: false, enumerable
     });
 }
+
+export function toByteBuffer(buffer: ArrayBufferLike): Uint8Array;
+export function toByteBuffer(buffer: ArrayBuffer, offset?: number, length?: number): Uint8Array;
+export function toByteBuffer(buffer: ArrayBuffer | ArrayBufferLike, offset?: number, length?: number): Uint8Array {
+    if (ArrayBuffer.isView(buffer)) {
+        offset = buffer.byteOffset;
+        length = buffer.byteLength;
+        buffer = buffer.buffer;
+    }
+    if (!(buffer instanceof ArrayBuffer)) { throw new TypeError('Argument 0 must be of buffer-like type'); }
+    return new Uint8Array(buffer, offset, length);
+}
