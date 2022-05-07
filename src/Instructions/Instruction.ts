@@ -33,19 +33,19 @@ export type StackEdit = [ (Types.ValueType | null)[], (Types.ValueType | { ref: 
 export type DefiniteStackEdit = [ Types.Stack, Types.Stack ];
 export type InstructionCtor<I extends Instruction, Args extends any[]=[]> = { new(...args: Args): I };
 
-export type Ext1Instruction<O extends OpCodesExt1=OpCodesExt1> = Instruction<OpCodes.op_extension_1> & { OperationCode: O };
-export type Ext2Instruction<O extends OpCodesExt2=OpCodesExt2> = Instruction<OpCodes.op_extension_2> & { OperationCode: O };
+export type Ext1Instruction<O extends OpCodesExt1=OpCodesExt1> = Instruction<OpCodes.op_extension_1> & { operationCode: O };
+export type Ext2Instruction<O extends OpCodesExt2=OpCodesExt2> = Instruction<OpCodes.op_extension_2> & { operationCode: O };
 
 export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodable<ExpressionEncodeContext> {
-    public readonly Code!: O;
+    public readonly code!: O;
     public get stack(): StackEdit { return [ [], [] ]; }
-    protected constructor(code: O) { protect(this, 'Code', code, true); }
+    protected constructor(code: O) { protect(this, 'code', code, true); }
     public getIndex(expression: Expression, pass?: boolean): number {
-        let index = expression.Instructions.indexOf(this);
+        let index = expression.instructions.indexOf(this);
         if (!pass && index < 0) { throw new KWatError('Instruction not present in the current expression'); }
         return index;
     }
-    public encode(encoder: IEncoder, _: ExpressionEncodeContext): void { encoder.uint8(this.Code); }
+    public encode(encoder: IEncoder, _: ExpressionEncodeContext): void { encoder.uint8(this.code); }
 
     public evaluate(stack: Types.Stack): Passable<undefined, Types.ResultType>;
     public evaluate<B extends boolean>(stack: Types.Stack, pass: B): Passable<B, Types.ResultType>;

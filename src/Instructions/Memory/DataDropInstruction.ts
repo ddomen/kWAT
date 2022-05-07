@@ -24,15 +24,15 @@ import type { ExpressionEncodeContext } from '../Instruction';
 import type { IDecoder, IEncoder } from '../../Encoding';
 
 export class DataDropInstruction extends AbstractMemoryInstruction<OpCodes.op_extension_1> {
-    public readonly OperationCode!: OpCodesExt1.data_drop;
-    public Data: DataSegment;
+    public readonly operationCode!: OpCodesExt1.data_drop;
+    public data: DataSegment;
     public constructor(data: DataSegment) {
         super(OpCodes.op_extension_1);
-        protect(this, 'OperationCode', OpCodesExt1.data_drop, true);
-        this.Data = data;
+        protect(this, 'operationCode', OpCodesExt1.data_drop, true);
+        this.data = data;
     }
     public getDataIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.dataSection.segments.indexOf(this.Data);
+        let index = context.module.dataSection.segments.indexOf(this.data);
         if (!pass && index < 0) { throw new KWatError('Memory Init Instruction invalid data reference'); }
         return index;
     }
@@ -40,7 +40,7 @@ export class DataDropInstruction extends AbstractMemoryInstruction<OpCodes.op_ex
         if (!context.options.bulkMemory) { throw new UnsupportedExtensionError('bulk memory'); }
         let index = this.getDataIndex(context);
         super.encode(encoder, context);
-        encoder.uint32(this.OperationCode).uint32(index);
+        encoder.uint32(this.operationCode).uint32(index);
     }
     public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): DataDropInstruction {
         let index = decoder.uint32();

@@ -35,17 +35,17 @@ export type MemoryManagementInstructionCodes = MemoryLoadInstructionCodes | Memo
 
 export abstract class MemoryManagementInstruction<O extends MemoryManagementInstructionCodes>
     extends AbstractMemoryInstruction<O> {
-    public Align: number;
-    public Memory: MemoryType | null;
+    public align: number;
+    public memory: MemoryType | null;
     protected constructor(code: O, memory?: MemoryType) {
         super(code);
-        this.Align = 0;
-        this.Memory = memory || null;
+        this.align = 0;
+        this.memory = memory || null;
     }
     protected encodeCode(encoder: IEncoder, context: ExpressionEncodeContext): void { super.encode(encoder, context); }
-    protected encodeAlign(encoder: IEncoder, _: ExpressionEncodeContext): void { encoder.uint32(this.Align); }
+    protected encodeAlign(encoder: IEncoder, _: ExpressionEncodeContext): void { encoder.uint32(this.align); }
     protected encodeContent(_: IEncoder, __: ExpressionEncodeContext): void { }
-    protected encodeMemory(encoder: IEncoder, context: ExpressionEncodeContext): void { encoder.uint32(this._memoryIndex(this.Memory, context)); }
+    protected encodeMemory(encoder: IEncoder, context: ExpressionEncodeContext): void { encoder.uint32(this._memoryIndex(this.memory, context)); }
 
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
         this.encodeCode(encoder, context);

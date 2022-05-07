@@ -23,13 +23,13 @@ import type { ExpressionDecodeContext, ExpressionEncodeContext } from '../Instru
 import type { IDecoder, IEncoder } from '../../Encoding';
 
 export class ElementDropInstruction extends TableInstruction<OpCodesExt1.elem_drop> {
-    public Element: ElementSegment;
+    public element: ElementSegment;
     public constructor(element: ElementSegment) {
         super(OpCodesExt1.elem_drop, null as any);
-        this.Element = element;
+        this.element = element;
     }
     public getElementIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.elementSection.elements.indexOf(this.Element);
+        let index = context.module.elementSection.elements.indexOf(this.element);
         if(!pass && index < 0) { throw new KWatError('Element Drop Instruction invalid element reference'); }
         return index;
     }

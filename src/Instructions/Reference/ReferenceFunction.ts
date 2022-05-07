@@ -23,10 +23,10 @@ import type { IDecoder, IEncoder } from '../../Encoding';
 import type * as Types from '../../Types';
 
 export class ReferenceFunctionInstruction extends ReferenceInstruction<OpCodes.ref_func> {
-    public Function: Types.FunctionType;
-    public constructor(fn: Types.FunctionType) { super(OpCodes.ref_func); this.Function = fn; }
+    public function: Types.FunctionType;
+    public constructor(fn: Types.FunctionType) { super(OpCodes.ref_func); this.function = fn; }
     public getFunctionIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.functionSection.indexOf(this.Function);
+        let index = context.module.functionSection.indexOf(this.function);
         if(!pass && index < 0) { throw new KWatError('Reference Instruction invalid function reference'); }
         return index;
     }

@@ -87,7 +87,7 @@ export class CodeSegment implements IEncodable<[Module, WasmOptions]> {
         if (curr - decoder.remaining !== len) { throw new KWatError('Invalid Code Segment length'); }
         return new CodeSegment(
             context.module.functionSection.functions[context.index++]!,
-            body.Instructions, locals as any[]
+            body.instructions, locals as any[]
         );
     }
 }

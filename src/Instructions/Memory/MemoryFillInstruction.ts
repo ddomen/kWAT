@@ -25,15 +25,15 @@ import type { IEncoder } from '../../Encoding';
 
 export class MemoryFillInstruction extends MemoryManagementInstruction<OpCodes.op_extension_1> {
     public override get stack(): StackEdit { return [ [ Type.i32, Type.i32, Type.i32 ], [] ]; }
-    public readonly OperationCode!: OpCodesExt1.memory_fill;
+    public readonly operationCode!: OpCodesExt1.memory_fill;
     public constructor(memory?: MemoryType) {
         super(OpCodes.op_extension_1, memory);
-        protect(this, 'OperationCode', OpCodesExt1.memory_fill, true);
+        protect(this, 'operationCode', OpCodesExt1.memory_fill, true);
     }
     protected override encodeAlign(_: IEncoder, __: ExpressionEncodeContext): void { }
     protected override encodeCode(encoder: IEncoder, context: ExpressionEncodeContext): void {
         super.encodeCode(encoder, context);
-        encoder.uint32(this.OperationCode);
+        encoder.uint32(this.operationCode);
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
         if (!context.options.bulkMemory) { throw new KWatError('Bulk memory instruction detected'); }

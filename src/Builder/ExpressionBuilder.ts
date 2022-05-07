@@ -148,7 +148,7 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
         )
         let block;
         if (typeof(expression) === 'function') {
-            block = expression(new ExpressionBuilder(this._function, this)).build().Instructions;
+            block = expression(new ExpressionBuilder(this._function, this)).build().instructions;
         }
         else { block = [ expression, ...instructions ]; }
         block = block.map(e => e instanceof Instructions.Instruction ? e : e.instance);
@@ -211,7 +211,7 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
     ): this {
         let tb;
         if (typeof(thenBlock) === 'function') {
-            tb = thenBlock(new ExpressionBuilder(this._function, this)).build().Instructions;
+            tb = thenBlock(new ExpressionBuilder(this._function, this)).build().instructions;
         }
         else { tb = thenBlock; }
         tb = tb.map(e => e instanceof Instructions.Instruction ? e : e.instance);
@@ -222,7 +222,7 @@ export class ExpressionBuilder implements IBuilder<Instructions.Expression> {
         else { ttype = new Types.FunctionType(this._stack, ttarget); }
         let eb;
         if (typeof(elseBlock) === 'function') {
-            eb = elseBlock(new ExpressionBuilder(this._function, this)).build().Instructions;
+            eb = elseBlock(new ExpressionBuilder(this._function, this)).build().instructions;
         }
         else { eb = elseBlock || []; }
         eb = eb.map(e => e instanceof Instructions.Instruction ? e : e.instance);

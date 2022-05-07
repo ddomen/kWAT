@@ -175,7 +175,7 @@ export class FunctionBuilder implements IBuilder<FunctionDefinition> {
     public bodyExpression(expression: BuildingCallback<ExpressionBuilder> | Exprimible, ...instructions: Exprimible[]): this {
         if (typeof(expression) === 'function') {
             let exp = expression(new ExpressionBuilder(this)).build();
-            this.addInstruction(...exp.Instructions);
+            this.addInstruction(...exp.instructions);
         }
         else { this.addInstruction(expression, ...instructions); }
         return this;

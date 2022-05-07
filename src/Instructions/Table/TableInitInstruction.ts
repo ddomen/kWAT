@@ -24,11 +24,11 @@ import type { IDecoder, IEncoder } from '../../Encoding';
 import type { ExpressionDecodeContext, ExpressionEncodeContext, StackEdit } from '../Instruction';
 
 export class TableInitInstruction extends TableInstruction<OpCodesExt1.table_init> {
-    public Element: ElementSegment;
+    public element: ElementSegment;
     public override get stack(): StackEdit { return [ [ Type.i32, Type.i32, Type.i32 ], [] ]; }
-    public constructor(table: TableType, element: ElementSegment) { super(OpCodesExt1.table_init, table); this.Element = element; }
+    public constructor(table: TableType, element: ElementSegment) { super(OpCodesExt1.table_init, table); this.element = element; }
     public getElementIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.elementSection.elements.indexOf(this.Element);
+        let index = context.module.elementSection.elements.indexOf(this.element);
         if(!pass && index < 0) { throw new KWatError('Table Init Instruction invalid element reference'); }
         return index;
     }

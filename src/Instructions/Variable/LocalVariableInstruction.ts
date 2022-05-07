@@ -22,11 +22,11 @@ import type { ExpressionEncodeContext, InstructionCtor } from '../Instruction';
 
 export type LocalVariableInstructionCodes = OpCodes.local_get | OpCodes.local_set | OpCodes.local_tee;
 export abstract class LocalVariableInstruction<O extends LocalVariableInstructionCodes=LocalVariableInstructionCodes> extends AbstractVariableInstruction<O> {
-    public Variable: number;
-    protected constructor(code: O, index: number) { super(code); this.Variable = index; }
+    public variable: number;
+    protected constructor(code: O, index: number) { super(code); this.variable = index; }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
         super.encode(encoder, context);
-        encoder.uint32(this.Variable);
+        encoder.uint32(this.variable);
     }
     public static override decode(
         this: InstructionCtor<LocalVariableInstruction, [ number ]>,

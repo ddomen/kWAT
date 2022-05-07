@@ -25,10 +25,10 @@ import type { IDecoder, IEncoder } from '../../Encoding';
 export type GlobalVariableInstructionCodes = OpCodes.global_get | OpCodes.global_set;
 export abstract class GlobalVariableInstruction<O extends GlobalVariableInstructionCodes=GlobalVariableInstructionCodes>
     extends AbstractVariableInstruction<O> {
-    public Variable: GlobalVariable;
-    protected constructor(code: O, variable: GlobalVariable) { super(code); this.Variable = variable; }
+    public variable: GlobalVariable;
+    protected constructor(code: O, variable: GlobalVariable) { super(code); this.variable = variable; }
     public getVariableIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.globalSection.globals.indexOf(this.Variable);
+        let index = context.module.globalSection.globals.indexOf(this.variable);
         if (!pass && index < 0) { throw new KWatError('Global Variable Instruction invalid variable reference'); }
         return index;
     }

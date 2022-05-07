@@ -26,7 +26,7 @@ export class I32ConstInstruction extends NumericConstInstruction<OpCodes.i32_con
     public constructor(value: number = 0) {super(OpCodes.i32_const, value); }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
         super.encode(encoder, context);
-        encoder.int32(this.Value | 0)
+        encoder.int32(this.value | 0)
     }
     public static override decode(decoder: IDecoder): I32ConstInstruction {
         return new I32ConstInstruction(decoder.uint32());

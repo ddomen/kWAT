@@ -25,24 +25,24 @@ import type { ExpressionEncodeContext, StackEdit } from '../Instruction';
 export class ReturnCallIndirectInstruction extends AbstractCallInstruction<OpCodes.return_call_indirect> {
     public override get stack(): StackEdit {
         return [
-            this.Type.parameters.slice().concat([ Types.Type.i32 ]),
-            this.Type.results.slice()
+            this.t.parameters.slice().concat([ Types.Type.i32 ]),
+            this.t.results.slice()
         ];
     }
-    public Type: Types.FunctionType;
-    public Table: Types.TableType;
+    public t: Types.FunctionType;
+    public table: Types.TableType;
     public constructor(fn: Types.FunctionType, table: Types.TableType) {
         super(OpCodes.return_call_indirect);
-        this.Type = fn;
-        this.Table = table;
+        this.t = fn;
+        this.table = table;
     }
     public getTypeIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.typeSection.indexOf(this.Type);
+        let index = context.module.typeSection.indexOf(this.t);
         if(!pass && index < 0) { throw new KWatError('Call Indirect Instruction invalid type reference'); }
         return index;
     }
     public getTableIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.tableSection.tables.indexOf(this.Table);
+        let index = context.module.tableSection.tables.indexOf(this.table);
         if(!pass && index < 0) { throw new KWatError('Call Indirect Instruction invalid table reference'); }
         return index;
     }

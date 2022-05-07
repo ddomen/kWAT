@@ -468,7 +468,7 @@ export class ModuleBuilder implements IBuilder<Module> {
             const g = this._globals[name]!;
             const gv = new GlobalVariable(
                 g.variable.type,
-                new Expression(g.initialization.Instructions),
+                new Expression(g.initialization.instructions),
                 g.variable.constant
             );
             m.globalSection.add(gv);

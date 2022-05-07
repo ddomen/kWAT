@@ -26,7 +26,7 @@ export class I64ConstInstruction extends NumericConstInstruction<OpCodes.i64_con
     public constructor(value: number | bigint = 0) {super(OpCodes.i64_const, value as number); }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
         super.encode(encoder, context);
-        encoder.int64(this.Value)
+        encoder.int64(this.value)
     }
     public static override decode(decoder: IDecoder): I64ConstInstruction {
         return new I64ConstInstruction(decoder.uint64());

@@ -26,17 +26,17 @@ import type { ExpressionEncodeContext, StackEdit } from '../Instruction';
 
 export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.op_extension_1> {
     public override get stack(): StackEdit { return [ [ Type.i32, Type.i32, Type.i32 ], [] ]; }
-    public readonly OperationCode!: OpCodesExt1.memory_init;
-    public Data: DataSegment;
-    public Memory: MemoryType | null;
+    public readonly operationCode!: OpCodesExt1.memory_init;
+    public data: DataSegment;
+    public memory: MemoryType | null;
     public constructor(data: DataSegment, memory?: MemoryType) {
         super(OpCodes.op_extension_1);
-        protect(this, 'OperationCode', OpCodesExt1.memory_init, true);
-        this.Data = data;
-        this.Memory = memory || null;
+        protect(this, 'operationCode', OpCodesExt1.memory_init, true);
+        this.data = data;
+        this.memory = memory || null;
     }
     public getDataIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.dataSection.segments.indexOf(this.Data);
+        let index = context.module.dataSection.segments.indexOf(this.data);
         if (!pass && index < 0) { throw new KWatError('Memory Init Instruction invalid data reference'); }
         return index;
     }
@@ -44,14 +44,14 @@ export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.op_
         if (!context.options.bulkMemory) { throw new UnsupportedExtensionError('bulk memory'); }
         let index = this.getDataIndex(context);
         let mem = 0;
-        if (this.Memory) {
-            mem = context.module.memorySection.indexOf(this.Memory);
-            if (mem === -1) { mem = context.module.importSection.indexOf(this.Memory)}
-            if (mem === -1) { throw new KWatError('Memory index not found: ' + this.Memory); }
+        if (this.memory) {
+            mem = context.module.memorySection.indexOf(this.memory);
+            if (mem === -1) { mem = context.module.importSection.indexOf(this.memory)}
+            if (mem === -1) { throw new KWatError('Memory index not found: ' + this.memory); }
         }
         if (mem && !context.options.multipleMemory) { throw new UnsupportedExtensionError('multiple memory'); }
         super.encode(encoder, context);
-        encoder.uint32(this.OperationCode)
+        encoder.uint32(this.operationCode)
                 .uint32(index)
                 .uint32(mem);
     }

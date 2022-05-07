@@ -25,21 +25,21 @@ import type { IEncoder } from '../../Encoding';
 
 export class MemoryCopyInstruction extends AbstractMemoryInstruction<OpCodes.op_extension_1> {
     public override get stack(): StackEdit { return [ [ Type.i32, Type.i32, Type.i32 ], [] ]; }
-    public readonly OperationCode!: OpCodesExt1.memory_copy;
-    public Source: MemoryType | null;
-    public Destination: MemoryType | null;
+    public readonly operationCode!: OpCodesExt1.memory_copy;
+    public source: MemoryType | null;
+    public sestination: MemoryType | null;
     public constructor(source?: MemoryType, destination?: MemoryType) {
         super(OpCodes.op_extension_1);
-        protect(this, 'OperationCode', OpCodesExt1.memory_copy, true);
-        this.Source = source || null;
-        this.Destination = destination || null;
+        protect(this, 'operationCode', OpCodesExt1.memory_copy, true);
+        this.source = source || null;
+        this.sestination = destination || null;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
         if (!context.options.bulkMemory) { throw new UnsupportedExtensionError('bulk memory'); }
         super.encode(encoder, context);
-        encoder.uint32(this.OperationCode)
-                .uint32(this._memoryIndex(this.Source, context))
-                .uint8(this._memoryIndex(this.Destination, context));
+        encoder.uint32(this.operationCode)
+                .uint32(this._memoryIndex(this.source, context))
+                .uint8(this._memoryIndex(this.sestination, context));
     }
     public static readonly instance = new MemoryCopyInstruction();
 }

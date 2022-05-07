@@ -26,7 +26,7 @@ export class F64ConstInstruction extends NumericConstInstruction<OpCodes.f64_con
     public constructor(value: number = 0) { super(OpCodes.f64_const, value); }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
         super.encode(encoder, context);
-        encoder.float64(this.Value)
+        encoder.float64(this.value)
     }
     public static override decode(decoder: IDecoder): F64ConstInstruction {
         return new F64ConstInstruction(decoder.float64());

@@ -23,14 +23,14 @@ import type { ExpressionEncodeContext, StackEdit } from '../Instruction';
 import type * as Types from '../../Types';
 
 export class CallInstruction extends AbstractCallInstruction<OpCodes.call> {
-    public override get stack(): StackEdit { return [ this.Function.parameters.slice(), this.Function.results.slice() ]; }
-    public Function: Types.FunctionType;
+    public override get stack(): StackEdit { return [ this.function.parameters.slice(), this.function.results.slice() ]; }
+    public function: Types.FunctionType;
     public constructor(fn: Types.FunctionType) {
         super(OpCodes.call);
-        this.Function = fn;
+        this.function = fn;
     }
     public getFunctionIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.typeSection.indexOf(this.Function);
+        let index = context.module.typeSection.indexOf(this.function);
         if(!pass && index < 0) { throw new KWatError('Call Instruction invalid function reference'); }
         return index;
     }

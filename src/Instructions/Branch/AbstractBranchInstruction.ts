@@ -23,13 +23,13 @@ import type { AbstractBlockInstruction } from '../Block';
 
 export type BranchInstructionCodes = OpCodes.br | OpCodes.br_if | OpCodes.br_table;
 export abstract class AbstractBranchInstruction<O extends BranchInstructionCodes=BranchInstructionCodes> extends Instruction<O> {
-    public Target: AbstractBlockInstruction;
+    public target: AbstractBlockInstruction;
     protected constructor(code: O, target: AbstractBlockInstruction) {
         super(code);
-        this.Target = target;
+        this.target = target;
     }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
-        let index = this.Target.getLabel(this);
+        let index = this.target.getLabel(this);
         super.encode(encoder, context);
         encoder.uint32(index);
     }

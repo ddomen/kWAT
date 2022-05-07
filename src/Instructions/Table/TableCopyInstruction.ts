@@ -23,16 +23,16 @@ import type { IDecoder, IEncoder } from '../../Encoding';
 import type { ExpressionDecodeContext, ExpressionEncodeContext, StackEdit } from '../Instruction';
 
 export class TableCopyInstruction extends TableInstruction<OpCodesExt1.table_copy> {
-    public Destination: TableType;
+    public destination: TableType;
     public override get stack(): StackEdit { return [ [ Type.i32, Type.i32, Type.i32 ], [] ]; }
-    public get Source(): TableType { return this.Table; }
-    public set Source(value: TableType) { this.Table = value; }
+    public get Source(): TableType { return this.table; }
+    public set Source(value: TableType) { this.table = value; }
     public constructor(table: TableType, destination: TableType) {
         super(OpCodesExt1.table_copy, table);
-        this.Destination = destination;
+        this.destination = destination;
     }
     public getDestinationIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.tableSection.tables.indexOf(this.Destination);
+        let index = context.module.tableSection.tables.indexOf(this.destination);
         if(!pass && index < 0) { throw new KWatError('Table Instruction invalid destination table reference'); }
         return index;
     }

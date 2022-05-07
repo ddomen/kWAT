@@ -34,20 +34,20 @@ export type Passable<T extends boolean | undefined, R> = R | (T extends false | 
 export class Expression implements IEncodable<[Module, WasmOptions]> {
 
     /** The set of the instructions holded by this expression */
-    public readonly Instructions!: Instruction[];
+    public readonly instructions!: Instruction[];
     
     /** Create and fill an expression of instructions
      * @param {Instruction[]} instructions the instruction holded by the new expression
      */
     public constructor(instructions: Instruction[]=[]) {
-        protect(this, 'Instructions', instructions.slice(), true);
+        protect(this, 'instructions', instructions.slice(), true);
     }
 
     /** Retrieve all the defined (function) types in the current set of instructions
      * @return {Types.FunctionType[]} all the defined (function) types
      */
     public getDefinedTypes(): Types.FunctionType[] {
-        return this.Instructions
+        return this.instructions
                     .filter(i => i instanceof AbstractBlockInstruction)
                     .map(i => (i as AbstractBlockInstruction).getDefinedTypes())
                     .reduce((a, v) => (a.push(...v), a), []);
@@ -57,11 +57,11 @@ export class Expression implements IEncodable<[Module, WasmOptions]> {
      * @return {Types.GlobalVariable[]} all the defined global variables
      */
     public getDefinedGlobals(): Sections.GlobalVariable[] {
-        let r = this.Instructions
+        let r = this.instructions
                     .filter(i => i instanceof GlobalVariableInstruction)
-                    .map(g => (g as GlobalVariableInstruction).Variable);
+                    .map(g => (g as GlobalVariableInstruction).variable);
         r.push(
-            ...this.Instructions
+            ...this.instructions
                     .filter(i => i instanceof AbstractBlockInstruction)
                     .map(i => (i as AbstractBlockInstruction).getDefinedGlobals())
                     .reduce((a, v) => (a.push(...v), a), [])
@@ -71,7 +71,7 @@ export class Expression implements IEncodable<[Module, WasmOptions]> {
 
     public encode(encoder: IEncoder, context: Module, opts: WasmOptions): void {
         encoder
-            .array(this.Instructions, { module: context, blocks: [], options: opts })
+            .array(this.instructions, { module: context, blocks: [], options: opts })
             .uint8(OpCodes.end);
     }
 
@@ -89,7 +89,7 @@ export class Expression implements IEncodable<[Module, WasmOptions]> {
      */
     public evaluate<B extends boolean>(params: Types.ResultType, pass: B): Passable<B, Types.ResultType>;
     public evaluate(params: Types.ResultType, pass?: boolean): Passable<typeof pass, Types.ResultType> {
-        return Instruction.resolveStack(this.Instructions, params, pass);
+        return Instruction.resolveStack(this.instructions, params, pass);
     }
     
     /** Reads and decodes a list of instructions (Expression) from a decoder
@@ -100,7 +100,7 @@ export class Expression implements IEncodable<[Module, WasmOptions]> {
     public static decode(decoder: IDecoder, mod: Module): Expression {
         let exp = new Expression();
         while (decoder.peek() != OpCodes.end) {
-            exp.Instructions.push(Instruction.decode(decoder, { module: mod, blocks: [] }));
+            exp.instructions.push(Instruction.decode(decoder, { module: mod, blocks: [] }));
         }
         decoder.uint8();
         return exp;

@@ -33,29 +33,29 @@ export type BlockInstructionCodes = OpCodes.block | OpCodes.loop | OpCodes.if;
 
 
 export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=BlockInstructionCodes> extends ControlInstruction<O> {
-    public Type: BlockType;
-    public readonly Block!: Instruction[];
+    public type: BlockType;
+    public readonly block!: Instruction[];
 
     protected constructor(code: O, block?: BlockType, instructions: Instruction[]=[]) {
         super(code);
-        this.Type = block || null;
-        protect(this, 'Block', instructions.slice(), true);
+        this.type = block || null;
+        protect(this, 'block', instructions.slice(), true);
     }
 
     public getDefinedTypes(): FunctionType[] {
-        let result = this.Block
+        let result = this.block
                         .filter(i => i instanceof AbstractBlockInstruction)
                         .map(b => (b as AbstractBlockInstruction).getDefinedTypes())
                         .reduce((a, v) => (a.push(...v), a), []);
-        if (this.Type instanceof FunctionType) { result.unshift(this.Type); }
+        if (this.type instanceof FunctionType) { result.unshift(this.type); }
         return result;
     }
     public getDefinedGlobals(): Sections.GlobalVariable[] {
-        let r = this.Block
+        let r = this.block
                     .filter(i => i instanceof GlobalVariableInstruction)
-                    .map(g => (g as GlobalVariableInstruction).Variable);
+                    .map(g => (g as GlobalVariableInstruction).variable);
         r.push(
-            ...this.Block
+            ...this.block
                     .filter(i => i instanceof AbstractBlockInstruction)
                     .map(i => (i as AbstractBlockInstruction).getDefinedGlobals())
                     .reduce((a, v) => (a.push(...v), a), [])
@@ -65,7 +65,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
 
     public getLabel(relative: AbstractBranchInstruction, pass?: boolean) {
         let children: AbstractBlockInstruction<BlockInstructionCodes>[] = [];
-        if (this.Block.find(i => (i instanceof AbstractBlockInstruction && children.push(i), i === relative))) {
+        if (this.block.find(i => (i instanceof AbstractBlockInstruction && children.push(i), i === relative))) {
             return 0;
         }
         let l: number = -1;
@@ -76,16 +76,16 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
 
     protected encodeOpen(encoder: IEncoder, context: ExpressionEncodeContext): void {
         super.encode(encoder, context);
-        if (!this.Type) { encoder.uint8(EmptyBlock); }
-        else if (this.Type instanceof FunctionType) {
-            let index = context.module.typeSection.indexOf(this.Type);
+        if (!this.type) { encoder.uint8(EmptyBlock); }
+        else if (this.type instanceof FunctionType) {
+            let index = context.module.typeSection.indexOf(this.type);
             if (index < 0) { throw new KWatError('Invalid Block Type type reference'); }
             encoder.int32(index);
         }
-        else { encoder.uint8(this.Type); }
+        else { encoder.uint8(this.type); }
     }
     protected encodeBlock(encoder: IEncoder, context: ExpressionEncodeContext): void {
-        encoder.array(this.Block, context);
+        encoder.array(this.block, context);
     }
     protected encodeClose(encoder: IEncoder, _: ExpressionEncodeContext): void {
         encoder.uint8(OpCodes.end);
@@ -127,9 +127,9 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         let block = this.decodeBlock(decoder, context);
         decoder.uint8();
         if (context.blocks.shift() !== this) { throw new KWatError('Unexpected block on the context stack'); }
-        this.Type = type;
-        this.Block.length = 0;
-        this.Block.push(...block);
+        this.type = type;
+        this.block.length = 0;
+        this.block.push(...block);
     }
 
     public static override decode<O extends BlockInstructionCodes>(

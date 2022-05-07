@@ -25,32 +25,32 @@ import type { ExpressionEncodeContext, Instruction, StackEdit } from '../Instruc
 
 export class IfThenElseInstruction extends AbstractBlockInstruction<OpCodes.if> {
     public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [] ]; }
-    public readonly Else!: Instruction[];
-    public get Then(): Instruction[] { return this.Block; }
+    public readonly else!: Instruction[];
+    public get then(): Instruction[] { return this.block; }
     public constructor(thenType?: BlockType, then: Instruction[] = [], elseBlock: Instruction[]=[]) {
         super(OpCodes.if, thenType, then);
-        protect(this, 'Else', elseBlock.slice(), true);
+        protect(this, 'else', elseBlock.slice(), true);
     }
 
     public override getDefinedTypes(): Types.FunctionType[] {
         let result = []
         result.push(
-            ...this.Block
+            ...this.block
             .filter(i => i instanceof AbstractBlockInstruction)
             .map(b => (b as AbstractBlockInstruction).getDefinedTypes())
             .reduce((a, v) => (a.push(...v), a), []),
-            ...this.Else
+            ...this.else
             .filter(i => i instanceof AbstractBlockInstruction)
             .map(b => (b as AbstractBlockInstruction).getDefinedTypes())
             .reduce((a, v) => (a.push(...v), a), [])
         );
-        if (this.Type instanceof Types.FunctionType) { result.unshift(this.Type); }
+        if (this.type instanceof Types.FunctionType) { result.unshift(this.type); }
         return result;
     }
 
     public override encodeBlock(encoder: IEncoder, context: ExpressionEncodeContext): void {
         super.encodeBlock(encoder, context)
-        if (this.Else.length) { encoder.uint8(OpCodes.else).array(this.Else, context); }
+        if (this.else.length) { encoder.uint8(OpCodes.else).array(this.else, context); }
     }
 
     public override decode(decoder: IDecoder, context: ExpressionEncodeContext): void {
@@ -63,11 +63,11 @@ export class IfThenElseInstruction extends AbstractBlockInstruction<OpCodes.if> 
             decoder.uint8();
         }
         if (context.blocks.shift() !== this) { throw new KWatError('Unexpected block on the context stack'); }
-        this.Type = type;
-        this.Block.length = 0;
-        this.Block.push(...block);
-        this.Else.length = 0;
-        this.Else.push(...elseBlock);
+        this.type = type;
+        this.block.length = 0;
+        this.block.push(...block);
+        this.else.length = 0;
+        this.else.push(...elseBlock);
     }
 }
 IfThenElseInstruction.registerInstruction(OpCodes.if);

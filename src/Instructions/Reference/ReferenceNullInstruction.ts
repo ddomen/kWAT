@@ -22,11 +22,11 @@ import type { ExpressionDecodeContext, ExpressionEncodeContext } from '../Instru
 import type { IDecoder, IEncoder } from '../../Encoding';
 
 export class ReferenceNullInstruction extends ReferenceInstruction<OpCodes.ref_null> {
-    public Type: Types.ReferenceType;
-    public constructor(type: Types.ReferenceType) { super(OpCodes.ref_null); this.Type = type; }
+    public type: Types.ReferenceType;
+    public constructor(type: Types.ReferenceType) { super(OpCodes.ref_null); this.type = type; }
     public override encode(encoder: IEncoder, context: ExpressionEncodeContext): void {
         super.encode(encoder, context);
-        encoder.uint8(this.Type);
+        encoder.uint8(this.type);
     }
     public static override decode(decoder: IDecoder, _?: ExpressionDecodeContext): ReferenceNullInstruction {
         return new ReferenceNullInstruction(decoder.uint8());

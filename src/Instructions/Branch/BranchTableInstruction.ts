@@ -26,16 +26,16 @@ import type { ExpressionEncodeContext, StackEdit } from '../Instruction';
 
 export class BranchTableInstruction extends AbstractBranchInstruction<OpCodes.br_table> {
     public override get stack(): StackEdit { return [ [ Types.Type.i32 ], [] ]; }
-    public readonly Targets!: AbstractBlockInstruction[];
+    public readonly targets!: AbstractBlockInstruction[];
     constructor(firstTarget: AbstractBlockInstruction, ...targets: AbstractBlockInstruction[]) {
         super(OpCodes.br_table, firstTarget);
-        protect(this, 'Targets', targets.slice(), true);
+        protect(this, 'targets', targets.slice(), true);
     }
     public override encode(encoder: IEncoder, _?: ExpressionEncodeContext): void {
-        let idxs = this.Targets.map(t => t.getLabel(this));
-        let index = this.Target.getLabel(this);
+        let idxs = this.targets.map(t => t.getLabel(this));
+        let index = this.target.getLabel(this);
         let targets = [ index, ...idxs ];
-        encoder.uint8(this.Code)
+        encoder.uint8(this.code)
             .vector(targets.slice(0, -1), 'uint32')
             .uint32(targets.slice(-1)[0]!);
     }
@@ -44,8 +44,8 @@ export class BranchTableInstruction extends AbstractBranchInstruction<OpCodes.br
         let labels = decoder.vector('uint32')
         labels.push(decoder.uint32());
         if (labels.some(l => !context.blocks[l])) { throw new KWatError('Branch Table Instruction invalid target label'); }
-        bti.Targets.length = 0;
-        bti.Targets.push(...labels.map(l => context.blocks[l]!));
+        bti.targets.length = 0;
+        bti.targets.push(...labels.map(l => context.blocks[l]!));
         return bti;
     }
 }
