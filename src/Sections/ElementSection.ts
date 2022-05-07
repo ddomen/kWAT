@@ -171,7 +171,7 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
      *                      used {@link functions}
      */
     public getFunctionIndices(mod: Module, pass?: boolean): number[] {
-        let idxs = this.functions.map(f => mod.typeSection.indexOf(f));
+        let idxs = this.functions.map(f => mod.indexOf(f));
         let wrong;
         if (!pass && idxs.some(i => (wrong = i, i < 0))) { throw new KWatError('Invalid function definition index (at: ' + wrong + ')') }
         return idxs;
@@ -186,7 +186,7 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
     public getTableIndex(mod: Module, pass?: boolean): number {
         if (!pass && !this.table) { throw new KWatError('Invalid ElementSegment Table reference'); }
         if (!this.table) { return -1; }
-        let idx = mod.tableSection.tables.indexOf(this.table);
+        let idx = mod.indexOf(this.table);
         if (!pass && idx < 0) { throw new KWatError('Invalid ElementSegment Table reference'); }
         return idx;
     }

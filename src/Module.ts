@@ -20,6 +20,8 @@ import { KWatError } from './errors';
 import { BuildingCallback, ModuleBuilder } from './Builder';
 import { IEncoder ,IDecoder, IEncodable, Relaxations } from './Encoding';
 import * as Sections from './Sections';
+import type { ImportDescription } from './Sections';
+import { FunctionType, GlobalType, MemoryType, TableType } from './Types';
 
 const ModuleMagic = 0x6d736100;
 
@@ -273,11 +275,41 @@ export class Module implements IEncodable<WasmOptions> {
         }
         let section, modSects = m.sections;
         for (let i in sections) {
-            section = modSects.find(s => s.type == parseInt(i));
+            const x = parseInt(i);
+            section = modSects.find(s => s.type === x);
             if (!section) { throw new KWatError('Module Section not found: ' + i); }
             section.decode(sections[i]!, m);
         }
         return m;
+    }
+
+    /** Retrieve the index of a section element, resolving it by
+     * counting also the elements of the import section of the same type
+     * @param {ImportDescription} search the section element to search
+     * @returns {number} the index of the section element, `-1` if not found
+     */
+    public indexOf(search: ImportDescription, byRef: boolean = false): number {
+        let index = -1, imports: ImportDescription[], target: { indexOf(a: any): number };
+        if (search instanceof FunctionType) {
+            target = byRef ? this.functionSection.functions : this.functionSection;
+            imports = this.importSection.imports.filter(i => i.isFunction()).map(i => i.description);
+        }
+        else if (search instanceof MemoryType) {
+            target = byRef ? this.memorySection.memories : this.memorySection;
+            imports = this.importSection.imports.filter(i => i.isMemory()).map(i => i.description);
+        }
+        else if (search instanceof TableType) {
+            target = byRef ? this.tableSection.tables : this.tableSection;
+            imports = this.importSection.imports.filter(i => i.isTable()).map(i => i.description);
+        }
+        else if (search instanceof GlobalType) {
+            target = byRef ? this.globalSection.globals : this.globalSection;
+            imports = this.importSection.imports.filter(i => i.isGlobal()).map(i => i.description);
+        }
+        else { return -1; }
+        index = byRef ? imports.indexOf(search) : this.importSection.indexOf(search);
+        if (index === -1) { index = target.indexOf(search) + imports.length; }
+        return index;
     }
 
     /** Create a builder that make it easy to fill the current module

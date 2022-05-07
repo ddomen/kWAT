@@ -45,6 +45,14 @@ export class TableSection extends Section<SectionTypes.table> {
         return false;
     }
 
+    /** Retrieve the index of a memory present in this section
+     * @param {Types.MemoryType} memory the memory to search
+     * @returns {number} the index of the variable, `-1` if not found
+     */
+    public indexOf(table: Types.TableType): number {
+        return this.tables.indexOf(table);
+    }
+
     public override contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         if (!this.tables.length) { return; }
         if (!opts.multipleTables) {

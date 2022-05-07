@@ -486,7 +486,7 @@ export class ModuleBuilder implements IBuilder<Module> {
         let keys = Object.keys(this._functions);
         for (const name in this._functions) {
             const def = this._functions[name]!;
-            const i = m.typeSection.indexOf(this._functions[name]!.type);
+            const i = m.indexOf(this._functions[name]!.type);
             if (def.exported) { m.exportSection.add(new ExportSegment(def.exported, def.type)); }
             m.typeSection.add(def.type);
             m.functionSection.add(def.type);

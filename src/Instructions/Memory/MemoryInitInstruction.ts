@@ -45,8 +45,7 @@ export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.op_
         let index = this.getDataIndex(context);
         let mem = 0;
         if (this.memory) {
-            mem = context.module.memorySection.indexOf(this.memory);
-            if (mem === -1) { mem = context.module.importSection.indexOf(this.memory)}
+            mem = context.module.indexOf(this.memory);
             if (mem === -1) { throw new KWatError('Memory index not found: ' + this.memory); }
         }
         if (mem && !context.options.multipleMemory) { throw new UnsupportedExtensionError('multiple memory'); }

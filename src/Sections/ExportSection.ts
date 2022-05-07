@@ -58,6 +58,8 @@ export class ExportSegment implements IEncodable<Module> {
         else if (this.isFunction()) { return ExchangeDescriptionCode.function; }
         return -1;
     }
+    /** Validity flag of the exchange code */
+    public get valid(): boolean { return this.code as number !== -1; }
 
     /** Create a new exported entity definition
      * @param {string} name the name of the exported entity
@@ -75,13 +77,8 @@ export class ExportSegment implements IEncodable<Module> {
      *                      `-1` if not found
      */
     public getIndex(mod: Module, pass?: boolean): number {
-        let target;
-        if (this.isFunction()) { target = mod.typeSection; }
-        else if (this.isGlobal()) { target = mod.globalSection.globals; }
-        else if (this.isMemory()) { target = mod.memorySection.memories; }
-        else if (this.isTable()) { target = mod.tableSection.tables; }
-        else { throw new KWatError('Invalid Description type'); }
-        let index = target.indexOf(this.description as any);
+        if (!this.valid) { throw new KWatError('Invalid Description type'); }
+        let index = mod.indexOf(this.description);
         if (!pass && index < 0) { throw new KWatError('Invalid function definition index!') }
         return index;
     }

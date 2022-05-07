@@ -106,7 +106,8 @@ export class GlobalSection extends Section<SectionTypes.global> {
      * @param {GlobalVariable} variable the variable to search
      * @returns {number} the index of the variable, `-1` if not found
      */
-    public indexOf(variable: GlobalVariable): number {
+    public indexOf(variable: GlobalVariable | GlobalType): number {
+        if (variable instanceof GlobalType) { return this.globals.findIndex(g => g.variable.equals(variable)); }
         if (variable.isReference) { return this.globals.findIndex(g => g === variable || variable.refer(g)); }
         return this.globals.indexOf(variable);
     }

@@ -30,7 +30,7 @@ export class ReturnCallInstruction extends AbstractCallInstruction<OpCodes.retur
         this.function = fn;
     }
     public getFunctionIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.typeSection.indexOf(this.function);
+        let index = context.module.indexOf(this.function);
         if(!pass && index < 0) { throw new KWatError('Call Instruction invalid function reference'); }
         return index;
     }

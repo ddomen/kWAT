@@ -36,8 +36,7 @@ export abstract class AbstractMemoryInstruction<O extends MemoryInstructionCodes
     protected _memoryIndex(memory: MemoryType | null, context: ExpressionEncodeContext): number {
         let mem = 0;
         if (memory) {
-            mem = context.module.memorySection.indexOf(memory);
-            if (mem === -1) { mem = context.module.importSection.indexOf(memory)}
+            mem = context.module.indexOf(memory);
             if (mem === -1) { throw new KWatError('Memory index not found: ' + memory); }
         }
         if (mem && !context.options.multipleMemory) { throw new UnsupportedExtensionError('multiple memory'); }

@@ -42,7 +42,7 @@ export class ReturnCallIndirectInstruction extends AbstractCallInstruction<OpCod
         return index;
     }
     public getTableIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.tableSection.tables.indexOf(this.table);
+        let index = context.module.indexOf(this.table);
         if(!pass && index < 0) { throw new KWatError('Call Indirect Instruction invalid table reference'); }
         return index;
     }

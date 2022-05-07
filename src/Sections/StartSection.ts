@@ -45,7 +45,7 @@ import type { IEncoder, IDecoder } from '../Encoding';
     public getStartIndex(mod: Module, pass?: boolean): number {
         if (!pass && !this.target) { throw new KWatError('Invalid starting function index'); }
         if (!this.target) { return -1; }
-        let index = mod.typeSection.indexOf(this.target);
+        let index = mod.indexOf(this.target);
         if (!pass && index < 0) { throw new KWatError('Invalid starting function index'); }
         return index;
     }

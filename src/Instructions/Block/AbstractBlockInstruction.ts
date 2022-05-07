@@ -78,7 +78,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         super.encode(encoder, context);
         if (!this.type) { encoder.uint8(EmptyBlock); }
         else if (this.type instanceof FunctionType) {
-            let index = context.module.typeSection.indexOf(this.type);
+            let index = context.module.indexOf(this.type);
             if (index < 0) { throw new KWatError('Invalid Block Type type reference'); }
             encoder.int32(index);
         }
