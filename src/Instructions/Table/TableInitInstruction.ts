@@ -28,7 +28,7 @@ export class TableInitInstruction extends TableInstruction<OpCodesExt1.table_ini
     public override get stack(): StackEdit { return [ [ Type.i32, Type.i32, Type.i32 ], [] ]; }
     public constructor(table: TableType, element: ElementSegment) { super(OpCodesExt1.table_init, table); this.Element = element; }
     public getElementIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.ElementSection.Elements.indexOf(this.Element);
+        let index = context.module.elementSection.elements.indexOf(this.Element);
         if(!pass && index < 0) { throw new KWatError('Table Init Instruction invalid element reference'); }
         return index;
     }
@@ -41,12 +41,12 @@ export class TableInitInstruction extends TableInstruction<OpCodesExt1.table_ini
     }
     public static override decode(decoder: IDecoder, context: ExpressionDecodeContext): TableInitInstruction {
         let elem = decoder.uint32();
-        if (!context.module.ElementSection.Elements[elem]) { throw new KWatError('Table Init Instruction invalid element reference'); }
+        if (!context.module.elementSection.elements[elem]) { throw new KWatError('Table Init Instruction invalid element reference'); }
         let table = decoder.uint32();
-        if (!context.module.TableSection.Tables[table]) { throw new KWatError('Table Init Instruction invalid table reference'); }
+        if (!context.module.tableSection.tables[table]) { throw new KWatError('Table Init Instruction invalid table reference'); }
         return new TableInitInstruction(
-            context.module.TableSection.Tables[table]!,
-            context.module.ElementSection.Elements[elem]!
+            context.module.tableSection.tables[table]!,
+            context.module.elementSection.elements[elem]!
         );
     }
 }

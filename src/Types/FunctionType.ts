@@ -30,12 +30,12 @@ import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
      * These will be asked to be into the stack during the execution of the function,
      * following the exact given order.
     */
-    public readonly Parameters!: ResultType;
+    public readonly parameters!: ResultType;
     /** The list of results types returned by the function.
      * These will be pushed into the stack after the execution of the function,
      * following the exact given order.
     */
-    public readonly Results!: ResultType;
+    public readonly results!: ResultType;
 
     /**
      * Creates a description of a function
@@ -43,15 +43,15 @@ import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
      * @param {ResultType} results the array of results of the function
      */
     public constructor(params: ResultType = [], results: ResultType = []) {
-        protect(this, 'Parameters', params.slice(), true);
-        protect(this, 'Results', results.slice(), true);
+        protect(this, 'parameters', params.slice(), true);
+        protect(this, 'results', results.slice(), true);
     }
 
     public encode(encoder: IEncoder): void {
         encoder
             .uint8(Type.func)
-            .vector(this.Parameters, 'uint8')
-            .vector(this.Results, 'uint8')
+            .vector(this.parameters, 'uint8')
+            .vector(this.results, 'uint8')
         ;
     }
 
@@ -63,17 +63,17 @@ import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
     public equals(other: any): boolean {
         return this === other || (
                 other instanceof FunctionType && 
-                this.Parameters.length == other.Parameters.length &&
-                this.Parameters.every((p, i) => p === other.Parameters[i]) &&
-                this.Results.length == other.Results.length &&
-                this.Results.every((r, i) => r === other.Results[i])
+                this.parameters.length == other.parameters.length &&
+                this.parameters.every((p, i) => p === other.parameters[i]) &&
+                this.results.length == other.results.length &&
+                this.results.every((r, i) => r === other.results[i])
         );
     }
 
     /** Deep copy the current object
      * @return {FunctionType} the deep copy of the function signature
      */
-    public clone(): FunctionType { return new FunctionType(this.Parameters, this.Results); }
+    public clone(): FunctionType { return new FunctionType(this.parameters, this.results); }
 
     /** Decodes a function type from a decoder
      * @param {IDecoder} decoder the target decoder

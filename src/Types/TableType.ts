@@ -26,9 +26,9 @@ import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
  */
  export class TableType implements IEncodable {
     /** The type of the elements contained by the table */
-    public Reference: ReferenceType;
+    public reference: ReferenceType;
     /** The size limits of the table */
-    public readonly Limits!: LimitType;
+    public readonly limits!: LimitType;
 
     /** Create a new table description
      * @param {ReferenceType} reference the type of the elements of the table
@@ -37,19 +37,19 @@ import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
      *  the maximal size of the table in elements (undefined for unlimited) 
      */
     public constructor(reference: ReferenceType, min: number = 0, max?: number) {
-        this.Reference = reference;
-        protect(this, 'Limits', new LimitType(min, max), true);
+        this.reference = reference;
+        protect(this, 'limits', new LimitType(min, max), true);
     }
 
     /** Deep copy the current object
      * @return {TableType} the deep copy of the table definition
      */
     public clone(): TableType {
-        return new TableType(this.Reference, this.Limits.Min, this.Limits.Max);
+        return new TableType(this.reference, this.limits.min, this.limits.max);
     }
 
     public encode(encoder: IEncoder): void {
-        encoder.uint8(this.Reference).encode(this.Limits);
+        encoder.uint8(this.reference).encode(this.limits);
     }
 
     /** Check whether a value represents the same table definition 
@@ -59,8 +59,8 @@ import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
     public equals(other: any): boolean {
         return this === other || (
                 other instanceof TableType &&
-                this.Reference === other.Reference &&
-                this.Limits.equals(other.Limits)
+                this.reference === other.reference &&
+                this.limits.equals(other.limits)
         );
     }
 
@@ -71,6 +71,6 @@ import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
     public static decode(decoder: IDecoder): TableType {
         let ref = decoder.uint8();
         let limit = LimitType.decode(decoder);
-        return new TableType(ref, limit.Min, limit.Max);
+        return new TableType(ref, limit.min, limit.max);
     }
 }

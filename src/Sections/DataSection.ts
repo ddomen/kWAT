@@ -49,30 +49,30 @@ export enum DataMode {
  */
 export class DataSegment implements IEncodable<[Module, WasmOptions]> {
     /** The mode of the segment */
-    public Mode: DataMode;
+    public mode: DataMode;
     /** The memory referenced where to store the data.
      * If null the memory is automatically selected
      * (assumes memory 0 if omitted since there should be only one memory in WASM-v1).
      */
-    public Memory: MemoryType | null;
+    public memory: MemoryType | null;
     /** The initialization expression, if present.
      * An active memory must be initialized with an expression.
      */
-    public Expression: Expression | null;
+    public expression: Expression | null;
     /** The initialization byte data */
-    public readonly Bytes!: number[];
+    public readonly bytes!: number[];
 
     /** True if the current segment is has the {@link DataMode.active} mode  */
-    public get isActive(): boolean { return !(this.Mode & 0x01); }
+    public get isActive(): boolean { return !(this.mode & 0x01); }
     /** True if the current segment is has the {@link DataMode.activeExplicit} mode  */
-    public get isExplicit(): boolean { return !!(this.Mode & 0x02); }
+    public get isExplicit(): boolean { return !!(this.mode & 0x02); }
 
     /** Create a new empty data segment with the given mode */
     constructor(kind: DataMode) {
-        this.Mode = kind;
-        this.Memory = null;
-        this.Expression = null;
-        protect(this, 'Bytes', [], true);
+        this.mode = kind;
+        this.memory = null;
+        this.expression = null;
+        protect(this, 'bytes', [], true);
     }
 
     /** Retrieve the memory index where the data will be
@@ -82,46 +82,46 @@ export class DataSegment implements IEncodable<[Module, WasmOptions]> {
      * @return {number} the index of the accessed memory
      */
     public getMemoryIndex(mod: Module, pass?: boolean): number {
-        if (this.Mode !== DataMode.activeExplicit) {
-            if (!pass && this.Memory) {
+        if (this.mode !== DataMode.activeExplicit) {
+            if (!pass && this.memory) {
                 throw new KWatError('Non-explicit data mode can not have an explicit memory reference');
             }
-            return this.Memory ?
-                    mod.MemorySection.Memories[0] === this.Memory ? 0 : -1 :
+            return this.memory ?
+                    mod.memorySection.memories[0] === this.memory ? 0 : -1 :
                     0;
         }
-        if (!this.Memory) {
-            if (!pass && !mod.MemorySection.Memories.length) {
+        if (!this.memory) {
+            if (!pass && !mod.memorySection.memories.length) {
                 throw new KWatError('Default memory not yet instanciated in the current module');
             }
             return 0;
         }
-        let idx = mod.MemorySection.Memories.indexOf(this.Memory);
+        let idx = mod.memorySection.memories.indexOf(this.memory);
         if (!pass && idx < 0) { throw new KWatError('Invalid DataSegment Memory reference'); }
         return idx;
     }
 
     public encode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
-        if (this.Mode < 0 || this.Mode > DataMode.activeExplicit) {
-            throw new KWatError('Invalid DataSegment kind: ' + this.Mode);
+        if (this.mode < 0 || this.mode > DataMode.activeExplicit) {
+            throw new KWatError('Invalid DataSegment kind: ' + this.mode);
         }
         let idx;
-        if (!this.Bytes) { throw new KWatError('Invalid DataSegment: missing data')}
-        encoder.uint8(this.Mode);
-        switch (this.Mode) {
+        if (!this.bytes) { throw new KWatError('Invalid DataSegment: missing data')}
+        encoder.uint8(this.mode);
+        switch (this.mode) {
             case DataMode.active:
-                if (!this.Expression) { throw new KWatError('Invalid DataSegment[Active]'); }
-                encoder.encode(this.Expression, mod, opts);
+                if (!this.expression) { throw new KWatError('Invalid DataSegment[Active]'); }
+                encoder.encode(this.expression, mod, opts);
                 break;
             case DataMode.activeExplicit:
-                if (!this.Memory || !this.Expression) { throw new KWatError('Invalid DataSegment[ActiveExplicit]'); }
+                if (!this.memory || !this.expression) { throw new KWatError('Invalid DataSegment[ActiveExplicit]'); }
                 idx = this.getMemoryIndex(mod)
-                encoder.uint32(idx).encode(this.Expression, mod, opts);
+                encoder.uint32(idx).encode(this.expression, mod, opts);
                 break;
             case DataMode.passive: break;
-            default: throw new KWatError('Invalid DataSegment kind: ' + this.Mode);
+            default: throw new KWatError('Invalid DataSegment kind: ' + this.mode);
         }
-        encoder.append(this.Bytes);
+        encoder.append(this.bytes);
     }
 
     public static decode(decoder: IDecoder, mod: Module): DataSegment {
@@ -129,21 +129,21 @@ export class DataSegment implements IEncodable<[Module, WasmOptions]> {
         let segment = new DataSegment(kind);
         switch (kind) {
             case DataMode.active:
-                segment.Expression = decoder.decode(Expression, mod);
+                segment.expression = decoder.decode(Expression, mod);
                 break;
             case DataMode.passive: break;
             case DataMode.activeExplicit: {
                 let idx = decoder.uint32();
-                if (!mod.MemorySection.Memories[idx]) {
+                if (!mod.memorySection.memories[idx]) {
                     throw new KWatError('Invalid Data Segment memory reference');
                 }
-                segment.Memory = mod.MemorySection.Memories[idx]!;
-                segment.Expression = decoder.decode(Expression, mod);
+                segment.memory = mod.memorySection.memories[idx]!;
+                segment.expression = decoder.decode(Expression, mod);
                 break;
             }
             default: throw new KWatError('Invalid DataSegment kind: ' + kind);
         }
-        segment.Bytes.push(...decoder.vector('uint8'));
+        segment.bytes.push(...decoder.vector('uint8'));
         return segment;
     }
 }
@@ -153,12 +153,12 @@ export class DataSegment implements IEncodable<[Module, WasmOptions]> {
  */
 export class DataSection extends Section<SectionTypes.data> {
     /** All the data segment present in this section */
-    public readonly Datas!: DataSegment[];
+    public readonly segments!: DataSegment[];
 
     /** Create an empty data section */
     public constructor() {
         super(SectionTypes.data);
-        protect(this, 'Datas', [], true);
+        protect(this, 'segments', [], true);
     }
 
     /** Add a new data segment, if not already present.
@@ -166,20 +166,20 @@ export class DataSection extends Section<SectionTypes.data> {
      * @return {boolean} the success of the operation
      */
     public add(segment: DataSegment): boolean { 
-        if (this.Datas.indexOf(segment) === -1) {
-            this.Datas.push(segment);
+        if (this.segments.indexOf(segment) === -1) {
+            this.segments.push(segment);
             return true;
         }
         return false;
     }
 
     protected contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
-        if (!this.Datas.length) { return; }
-        encoder.vector(this.Datas, mod, opts);
+        if (!this.segments.length) { return; }
+        encoder.vector(this.segments, mod, opts);
     }
 
     public decode(decoder: IDecoder, mod: Module): void {
-        this.Datas.length = 0;
-        this.Datas.push(...decoder.vector(DataSegment, mod));
+        this.segments.length = 0;
+        this.segments.push(...decoder.vector(DataSegment, mod));
     }
 }

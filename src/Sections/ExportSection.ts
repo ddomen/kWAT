@@ -30,25 +30,25 @@ export type ExportDescription = Types.FunctionType | Types.TableType | Types.Mem
 /** A part of the export section which describe an export operation */
 export class ExportSegment implements IEncodable<Module> {
     /** The name of the exported entity */
-    public Name: string;
+    public name: string;
     /** A description of the exported entity */
-    public Description: ExportDescription;
+    public description: ExportDescription;
 
     /** Whether or not the import entity is a function declaration */
     public isFunction(): this is ExchangeNarrower<Types.FunctionType> {
-        return this.Description instanceof Types.FunctionType;
+        return this.description instanceof Types.FunctionType;
     }
     /** Whether or not the import entity is a table declaration */
     public isTable(): this is ExchangeNarrower<Types.TableType> {
-        return this.Description instanceof Types.TableType;
+        return this.description instanceof Types.TableType;
     }
     /** Whether or not the import entity is a memory declaration */
     public isMemory(): this is ExchangeNarrower<Types.MemoryType> {
-        return this.Description instanceof Types.LimitType;
+        return this.description instanceof Types.LimitType;
     }
     /** Whether or not the import entity is a global variable declaration */
     public isGlobal(): this is ExchangeNarrower<Types.GlobalType> {
-        return this.Description instanceof Types.GlobalType;
+        return this.description instanceof Types.GlobalType;
     }
     /** The exchange code of the imported entity */
     public get code(): ExchangeDescriptionCode {
@@ -64,8 +64,8 @@ export class ExportSegment implements IEncodable<Module> {
      * @param {ImportDescription} description the description of the exported entity
      */
     public constructor(name: string, description: ExportDescription) {
-        this.Name = name;
-        this.Description = description;
+        this.name = name;
+        this.description = description;
     }
     
     /** Retrieves the index of the exported entity
@@ -76,12 +76,12 @@ export class ExportSegment implements IEncodable<Module> {
      */
     public getIndex(mod: Module, pass?: boolean): number {
         let target;
-        if (this.isFunction()) { target = mod.TypeSection; }
-        else if (this.isGlobal()) { target = mod.GlobalSection.Globals; }
-        else if (this.isMemory()) { target = mod.MemorySection.Memories; }
-        else if (this.isTable()) { target = mod.TableSection.Tables; }
+        if (this.isFunction()) { target = mod.typeSection; }
+        else if (this.isGlobal()) { target = mod.globalSection.globals; }
+        else if (this.isMemory()) { target = mod.memorySection.memories; }
+        else if (this.isTable()) { target = mod.tableSection.tables; }
         else { throw new KWatError('Invalid Description type'); }
-        let index = target.indexOf(this.Description as any);
+        let index = target.indexOf(this.description as any);
         if (!pass && index < 0) { throw new KWatError('Invalid function definition index!') }
         return index;
     }
@@ -91,7 +91,7 @@ export class ExportSegment implements IEncodable<Module> {
         if (code < 0) { throw new KWatError('Invalid export description!'); }
         let index = this.getIndex(mod);
         encoder
-            .vector(this.Name)
+            .vector(this.name)
             .uint8(code)
             .uint32(index);
     }
@@ -108,16 +108,16 @@ export class ExportSegment implements IEncodable<Module> {
             target;
         switch (code) {
             case ExchangeDescriptionCode.function:
-                target = mod.TypeSection.Types;
+                target = mod.typeSection.types;
                 break;
             case ExchangeDescriptionCode.global:
-                target = mod.GlobalSection.Globals.map(g => g.Variable);
+                target = mod.globalSection.globals.map(g => g.variable);
                 break;
             case ExchangeDescriptionCode.memory:
-                target = mod.MemorySection.Memories;
+                target = mod.memorySection.memories;
                 break;
             case ExchangeDescriptionCode.table:
-                target = mod.TableSection.Tables;
+                target = mod.tableSection.tables;
                 break;
             default: throw new KWatError('Export Segment invalid description code');
         }
@@ -129,12 +129,12 @@ export class ExportSegment implements IEncodable<Module> {
 /** A section containing all the exported entities the module */
 export class ExportSection extends Section<SectionTypes.export> {
     /** All the exported entity declarations of the section */
-    public readonly Exports!: ExportSegment[];
+    public readonly exports!: ExportSegment[];
 
     /** Create an empty export section */
     public constructor() {
         super(SectionTypes.export);
-        protect(this, 'Exports', [], true);
+        protect(this, 'exports', [], true);
     }
 
     /** Add a new export segment to the section, if not present,
@@ -143,24 +143,24 @@ export class ExportSection extends Section<SectionTypes.export> {
      * @returns {boolean} the success of the operation
      */
     public add(segment: ExportSegment): boolean {
-        if (this.Exports.some(e => e.Name == segment.Name)) {
+        if (this.exports.some(e => e.name == segment.name)) {
             return false;
         }
-        this.Exports.push(segment);
+        this.exports.push(segment);
         return true;
     }
 
     protected contentEncode(encoder: IEncoder, mod: Module) {
-        if (!this.Exports.length) { return; }
-        if (this.Exports.some(i => i.getIndex(mod) < 0)) {
+        if (!this.exports.length) { return; }
+        if (this.exports.some(i => i.getIndex(mod) < 0)) {
             throw new KWatError('Invalid function definition index');
         }
-        encoder.vector(this.Exports, mod);
+        encoder.vector(this.exports, mod);
     }
 
     public override decode(decoder: IDecoder, mod: Module) {
-        this.Exports.length = 0;
-        this.Exports.push(...decoder.vector(ExportSegment, mod));
+        this.exports.length = 0;
+        this.exports.push(...decoder.vector(ExportSegment, mod));
     }
 
 }

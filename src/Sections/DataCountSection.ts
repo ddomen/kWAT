@@ -28,8 +28,8 @@ export class DataCountSection extends Section<SectionTypes.dataCount> {
     public constructor() { super(SectionTypes.dataCount); }
 
     protected contentEncode(encoder: IEncoder, mod: Module): void {
-        if (!mod.DataSection.Datas.length) { return; }
-        encoder.uint32(mod.DataSection.Datas.length);
+        if (!mod.dataSection.segments.length) { return; }
+        encoder.uint32(mod.dataSection.segments.length);
     }
     public override decode(): void { }
 }

@@ -21,15 +21,15 @@ import { CustomSection } from '../CustomSection';
 import type { IDecoder, IEncodable, IEncoder } from '../../Encoding';
 
 export class NameReference implements IEncodable {
-    public Index: number;
-    public Name: string;
+    public index: number;
+    public name: string;
     public constructor(index: number, name: string) {
-        this.Index = index;
-        this.Name = name;
+        this.index = index;
+        this.name = name;
     }
     public encode(encoder: IEncoder): any {
-        encoder.uint32(this.Index);
-        encoder.string(this.Name);
+        encoder.uint32(this.index);
+        encoder.string(this.name);
     }
     public static decode(decoder: IDecoder): NameReference {
         return new NameReference(
@@ -46,58 +46,54 @@ export enum NameSubSections {
     local     = 0x02
 }
 export class NameCustomSection extends CustomSection {
-    public Module: string | null;
-    public readonly Functions!: NameReference[];
-    public readonly Locals!: { [key: number]: NameReference[] };
+    public module: string | null;
+    public readonly functions!: NameReference[];
+    public readonly locals!: { [key: number]: NameReference[] };
     public constructor() {
         super('name', false);
-        this.Module = null;
-        protect(this, 'Functions', []);
-        protect(this, 'Locals', {});
+        this.module = null;
+        protect(this, 'functions', []);
+        protect(this, 'locals', {});
     }
 
-    public module(name: string): this {
-        this.Module = name;
-        return this;
-    }
     public function(value: NameReference): boolean {
-        let rv = this.Functions.find(m => m.Index === value.Index);
+        let rv = this.functions.find(m => m.index === value.index);
         if (rv) { return false; }
-        this.Functions.push(value);
+        this.functions.push(value);
         return true;
     }
     public local(fnIndex: number, value: NameReference): boolean {
-        if (!this.Locals[fnIndex]) { this.Locals[fnIndex] = []; }
-        let rv = this.Locals[fnIndex]!.find(m => m.Index === value.Index);
+        if (!this.locals[fnIndex]) { this.locals[fnIndex] = []; }
+        let rv = this.locals[fnIndex]!.find(m => m.index === value.index);
         if (rv) { return false; }
-        this.Locals[fnIndex]!.push(value);
+        this.locals[fnIndex]!.push(value);
         return true;
     }
     protected override encodeBytes(encoder: IEncoder): void {
-        if (this.Module !== null) {
+        if (this.module !== null) {
             const e = encoder.spawn();
-            e.string(this.Module);
+            e.string(this.module);
             encoder.uint8(NameSubSections.module).uint32(e.size).append(e);
         }
-        if (this.Functions.length) {
+        if (this.functions.length) {
             const e = encoder.spawn();
-            e.vector(this.Functions);
+            e.vector(this.functions);
             encoder.uint8(NameSubSections.function).uint32(e.size).append(e);
         }
-        const locFns = Object.keys(this.Locals);
+        const locFns = Object.keys(this.locals);
         if (locFns.length) {
             const e = encoder.spawn();
             e.uint32(locFns.length);
-            for (let k in this.Locals) {
-                e.uint32(parseInt(k)).vector(this.Locals[k]!);
+            for (let k in this.locals) {
+                e.uint32(parseInt(k)).vector(this.locals[k]!);
             }
             encoder.uint8(NameSubSections.local).uint32(e.size).append(e);
         }
     }
     protected override decodeBytes(decoder: IDecoder): void {
-        this.Module = null;
-        this.Functions.length = 0;
-        for (const k in this.Locals) { delete this.Locals[k]; }
+        this.module = null;
+        this.functions.length = 0;
+        for (const k in this.locals) { delete this.locals[k]; }
 
         while (decoder.remaining) {
             const type = decoder.uint8();
@@ -105,15 +101,15 @@ export class NameCustomSection extends CustomSection {
             const d = decoder.slice(size);
             switch (type) {
                 case NameSubSections.module:
-                    this.Module = d.vector('utf8'); break;
+                    this.module = d.vector('utf8'); break;
                 case NameSubSections.function:
-                    this.Functions.push(...d.vector(NameReference)); break;
+                    this.functions.push(...d.vector(NameReference)); break;
                 case NameSubSections.local: {
                     const n = d.uint32();
                     for (let i = 0; i < n; ++i) {
                         const k = d.uint32();
-                        this.Locals[k] = this.Locals[k] || [];
-                        this.Locals[k]!.push(...d.vector(NameReference));
+                        this.locals[k] = this.locals[k] || [];
+                        this.locals[k]!.push(...d.vector(NameReference));
                     }
                     break;
                 }

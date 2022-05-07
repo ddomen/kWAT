@@ -32,7 +32,7 @@ export class DataDropInstruction extends AbstractMemoryInstruction<OpCodes.op_ex
         this.Data = data;
     }
     public getDataIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.DataSection.Datas.indexOf(this.Data);
+        let index = context.module.dataSection.segments.indexOf(this.Data);
         if (!pass && index < 0) { throw new KWatError('Memory Init Instruction invalid data reference'); }
         return index;
     }
@@ -44,8 +44,8 @@ export class DataDropInstruction extends AbstractMemoryInstruction<OpCodes.op_ex
     }
     public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): DataDropInstruction {
         let index = decoder.uint32();
-        if (!context.module.DataSection.Datas[index]) { throw new KWatError('Memory Init Instruction invalid data reference'); }
-        return new DataDropInstruction(context.module.DataSection.Datas[index]!)
+        if (!context.module.dataSection.segments[index]) { throw new KWatError('Memory Init Instruction invalid data reference'); }
+        return new DataDropInstruction(context.module.dataSection.segments[index]!)
     }
 }
 DataDropInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.data_drop);

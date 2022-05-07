@@ -28,7 +28,7 @@ export abstract class GlobalVariableInstruction<O extends GlobalVariableInstruct
     public Variable: GlobalVariable;
     protected constructor(code: O, variable: GlobalVariable) { super(code); this.Variable = variable; }
     public getVariableIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.GlobalSection.Globals.indexOf(this.Variable);
+        let index = context.module.globalSection.globals.indexOf(this.Variable);
         if (!pass && index < 0) { throw new KWatError('Global Variable Instruction invalid variable reference'); }
         return index;
     }

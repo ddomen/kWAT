@@ -25,12 +25,12 @@ import type { IEncoder, IDecoder } from '../Encoding';
 /** A section containing all the memory definitions of the module */
 export class MemorySection extends Section<SectionTypes.memory> {
     /** The defined memory descriptions */
-    public readonly Memories!: Types.MemoryType[];
+    public readonly memories!: Types.MemoryType[];
 
     /** Create a new empty memory section */
     public constructor() {
         super(SectionTypes.memory);
-        protect(this, 'Memories', [], true);
+        protect(this, 'memories', [], true);
     }
     
     /** Add a new memory description to this section if not already present
@@ -38,8 +38,8 @@ export class MemorySection extends Section<SectionTypes.memory> {
      * @returns {boolean} success of the insertion
      */
     public add(memory: Types.MemoryType): boolean {
-        if (this.Memories.indexOf(memory) == -1) {
-            this.Memories.unshift(memory);
+        if (this.memories.indexOf(memory) == -1) {
+            this.memories.unshift(memory);
             return true;
         }
         return false;
@@ -50,25 +50,25 @@ export class MemorySection extends Section<SectionTypes.memory> {
      * @returns {number} the index of the variable, `-1` if not found
      */
     public indexOf(memory: Types.MemoryType): number {
-        return this.Memories.indexOf(memory);
+        return this.memories.indexOf(memory);
     }
 
     public override contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
-        if (!this.Memories.length) { return; }
+        if (!this.memories.length) { return; }
         if (!opts.multipleMemory) {
-            let mem = this.Memories;
+            let mem = this.memories;
             mem.push(
-                ...mod.ImportSection.Imports
-                    .map(i => i.isMemory() ? i.Description : null!)
+                ...mod.importSection.imports
+                    .map(i => i.isMemory() ? i.description : null!)
                     .filter(x => !!x)
             );
             if (mem.length > 1) { throw new KWatError('Multiple memory declaration detected'); }
         }
-        encoder.vector(this.Memories);
+        encoder.vector(this.memories);
     }
 
     public override decode(decoder: IDecoder) {
-        this.Memories.length = 0;
-        this.Memories.push(...decoder.vector(Types.MemoryType));
+        this.memories.length = 0;
+        this.memories.push(...decoder.vector(Types.MemoryType));
     }
 }

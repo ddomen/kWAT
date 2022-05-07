@@ -61,7 +61,7 @@ export abstract class Section<S extends SectionTypes=SectionTypes>
     protected _precedence!: number;
     /** The type code of this section
      * @readonly */
-    public readonly Type!: S;
+    public readonly type!: S;
 
     /** The precedence of this section (used in physical encoding) */
     public get precedence(): number { return this._precedence; }
@@ -70,9 +70,9 @@ export abstract class Section<S extends SectionTypes=SectionTypes>
      * @param {S} type the {@link SectionType} code of this section
      */
     protected constructor(type: S) {
-        protect(this, 'Type', type, true);
-        if (this.Type !== SectionTypes.custom) {
-            let prec: SectionTypes = this.Type
+        protect(this, 'type', type, true);
+        if (this.type !== SectionTypes.custom) {
+            let prec: SectionTypes = this.type
             if (prec === SectionTypes.data) { prec = SectionTypes.dataCount; }
             else if (prec === SectionTypes.dataCount) { prec = SectionTypes.data; }
             protect(this, '_precedence' as any, prec, false);
@@ -83,7 +83,7 @@ export abstract class Section<S extends SectionTypes=SectionTypes>
     public encode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         let content = encoder.spawn();
         this.contentEncode(content, mod, opts);
-        if (content.size) { encoder.uint8(this.Type).uint32(content.size).append(content); }
+        if (content.size) { encoder.uint8(this.type).uint32(content.size).append(content); }
     }
 
     public abstract decode(decoder: IDecoder, mod: Module): void;

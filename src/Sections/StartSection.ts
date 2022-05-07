@@ -28,12 +28,12 @@ import type { IEncoder, IDecoder } from '../Encoding';
     /** The function targetted to be the start function.
      * If null this section wil be ignored during the encoding
      */
-    public Target: Types.FunctionType | null;
+    public target: Types.FunctionType | null;
 
     /** Create a new empty start section */
     constructor() {
         super(SectionTypes.start);
-        this.Target = null;
+        this.target = null;
     }
 
     /** Retrieve the type index of the start function
@@ -43,22 +43,22 @@ import type { IEncoder, IDecoder } from '../Encoding';
      * @returns {number} the index of the start function, `-1` if not found
      */
     public getStartIndex(mod: Module, pass?: boolean): number {
-        if (!pass && !this.Target) { throw new KWatError('Invalid starting function index'); }
-        if (!this.Target) { return -1; }
-        let index = mod.TypeSection.indexOf(this.Target);
+        if (!pass && !this.target) { throw new KWatError('Invalid starting function index'); }
+        if (!this.target) { return -1; }
+        let index = mod.typeSection.indexOf(this.target);
         if (!pass && index < 0) { throw new KWatError('Invalid starting function index'); }
         return index;
     }
 
     public override contentEncode(encoder: IEncoder, mod: Module): void {
-        if (!this.Target) { return; }
+        if (!this.target) { return; }
         encoder.uint32(this.getStartIndex(mod));
     }
     public override decode(decoder: IDecoder, mod: Module) {
         let index = decoder.uint32();
-        if (!mod.TypeSection.Types[index]) {
+        if (!mod.typeSection.types[index]) {
             throw new KWatError('Start Section invalid function reference');
         }
-        this.Target = mod.TypeSection.Types[index]!;
+        this.target = mod.typeSection.types[index]!;
     }
 }

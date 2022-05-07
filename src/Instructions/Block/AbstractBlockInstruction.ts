@@ -78,7 +78,7 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         super.encode(encoder, context);
         if (!this.Type) { encoder.uint8(EmptyBlock); }
         else if (this.Type instanceof FunctionType) {
-            let index = context.module.TypeSection.indexOf(this.Type);
+            let index = context.module.typeSection.indexOf(this.Type);
             if (index < 0) { throw new KWatError('Invalid Block Type type reference'); }
             encoder.int32(index);
         }
@@ -105,10 +105,10 @@ export abstract class AbstractBlockInstruction<O extends BlockInstructionCodes=B
         else if (header in Type) { block = header; decoder.uint8(); }
         else {
             let index = decoder.int32();
-            if (!context.module.TypeSection.Types[index]) {
+            if (!context.module.typeSection.types[index]) {
                 throw new KWatError('Invalid Block Type type reference');
             }
-            block = context.module.TypeSection.Types[index]!;
+            block = context.module.typeSection.types[index]!;
         }
         return block;
     }

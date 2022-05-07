@@ -35,7 +35,7 @@ export abstract class TableOperationInstruction<O extends TableOpInstructionCode
         context: ExpressionDecodeContext
     ): TableOperationInstruction {
         let index = decoder.uint32();
-        if (!context.module.TableSection.Tables[index]) { throw new KWatError('Table Operation Instruction invalid table reference'); }
-        return new this(context.module.TableSection.Tables[index]!);
+        if (!context.module.tableSection.tables[index]) { throw new KWatError('Table Operation Instruction invalid table reference'); }
+        return new this(context.module.tableSection.tables[index]!);
     }
 }

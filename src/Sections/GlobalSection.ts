@@ -25,14 +25,14 @@ import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
 /** A global variable definition, part of a {@link GlobalSection} */
 export class GlobalVariable implements IEncodable<[Module, WasmOptions]> {
     /** The variable type description */
-    public readonly Variable!: GlobalType;
+    public readonly variable!: GlobalType;
     /** The expression which initialize the global variable */
-    public readonly Initialization!: Expression;
+    public readonly initialization!: Expression;
     /** A reference name for the current variable */
-    public Reference: string;
+    public reference: string;
 
     /** whether this variable is a reference to an external variable */
-    public get isReference(): boolean { return this.Variable === -1 as any && !!this.Reference && !this.Initialization; }
+    public get isReference(): boolean { return this.variable === -1 as any && !!this.reference && !this.initialization; }
 
     /** Creates a new global variable
      * @param {ValueType} type the type of the variable
@@ -41,9 +41,9 @@ export class GlobalVariable implements IEncodable<[Module, WasmOptions]> {
      * @param {string} [reference] a reference name
      */
     constructor(type: ValueType, init: Expression, constant: boolean = false, reference?: string) {
-        protect(this, 'Variable', new GlobalType(type, constant), true);
-        protect(this, 'Initialization', init, true);
-        this.Reference = reference || '';
+        protect(this, 'variable', new GlobalType(type, constant), true);
+        protect(this, 'initialization', init, true);
+        this.reference = reference || '';
     }
 
     /** Check if this variable is currently the target of reference of another value.
@@ -51,19 +51,19 @@ export class GlobalVariable implements IEncodable<[Module, WasmOptions]> {
      * @return {boolean} whether the other value is the target of reference of the current variable
     */
     public referred(other: GlobalVariable | string): boolean {
-        if (other instanceof GlobalVariable) { return other.isReference && this.Reference === other.Reference; }
-        return this.Reference === other;
+        if (other instanceof GlobalVariable) { return other.isReference && this.reference === other.reference; }
+        return this.reference === other;
     }
     /** Check if this variable currently refer the same as another variable 
      * @param {(GlobalVariable|string)} other the referenced value
      * @returns {boolean} whether this variable refer the other value
      */
     public refer(other: GlobalVariable | string): boolean {
-        return this.isReference && (other instanceof GlobalVariable ? other.Reference : other) === other;
+        return this.isReference && (other instanceof GlobalVariable ? other.reference : other) === other;
     }
 
     public encode(encoder: IEncoder, mod: Module, opts: WasmOptions) {
-        encoder.encode(this.Variable, opts).encode(this.Initialization, mod, opts);
+        encoder.encode(this.variable, opts).encode(this.initialization, mod, opts);
     }
     
     /**Decode this object through a decoder
@@ -74,9 +74,9 @@ export class GlobalVariable implements IEncodable<[Module, WasmOptions]> {
     public static decode(decoder: IDecoder, mod: Module): GlobalVariable {
         let type = decoder.decode(GlobalType);
         return new GlobalVariable(
-            type.Type,
+            type.type,
             decoder.decode(Expression, mod),
-            type.Constant
+            type.constant
         );
     }
 
@@ -93,12 +93,12 @@ export class GlobalVariable implements IEncodable<[Module, WasmOptions]> {
 /** A section containing all the global variable definitions of the module */
 export class GlobalSection extends Section<SectionTypes.global> {
     /** All the defined global variables */
-    public readonly Globals!: GlobalVariable[];
+    public readonly globals!: GlobalVariable[];
 
     /** Create a new empty global section */
     constructor() {
         super(SectionTypes.global);
-        protect(this, 'Globals', [], true);
+        protect(this, 'globals', [], true);
     }
 
     /** Retrieve the index of a global variable present in this section
@@ -107,8 +107,8 @@ export class GlobalSection extends Section<SectionTypes.global> {
      * @returns {number} the index of the variable, `-1` if not found
      */
     public indexOf(variable: GlobalVariable): number {
-        if (variable.isReference) { return this.Globals.findIndex(g => g === variable || variable.refer(g)); }
-        return this.Globals.indexOf(variable);
+        if (variable.isReference) { return this.globals.findIndex(g => g === variable || variable.refer(g)); }
+        return this.globals.indexOf(variable);
     }
 
     /** Add a new global variable to the section.
@@ -118,21 +118,21 @@ export class GlobalSection extends Section<SectionTypes.global> {
      * @returns {boolean} the success of the operation
      */
     public add(variable: GlobalVariable): boolean {
-        if (!variable.isReference && this.Globals.indexOf(variable) === -1) {
-            this.Globals.push(variable);
+        if (!variable.isReference && this.globals.indexOf(variable) === -1) {
+            this.globals.push(variable);
             return true;
         }
         return false;
     }
     
     public override contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
-        if (!this.Globals.length) { return; }
-        encoder.vector(this.Globals, mod, opts);
+        if (!this.globals.length) { return; }
+        encoder.vector(this.globals, mod, opts);
     }
 
 
     public override decode(decoder: IDecoder, mod: Module) {
-        this.Globals.length = 0;
-        this.Globals.push(...decoder.vector(GlobalVariable, mod));
+        this.globals.length = 0;
+        this.globals.push(...decoder.vector(GlobalVariable, mod));
     }
 }

@@ -20,17 +20,17 @@ import { CustomSection } from '../CustomSection';
 import type { IDecoder, IEncoder } from '../../Encoding';
 
 export class UnkownCustomSection extends CustomSection {
-    public override Name!: string;
-    public readonly Bytes!: number[];
+    public override name!: string;
+    public readonly bytes!: number[];
     public constructor(name: string) {
         super(name, false);
-        protect(this, 'Bytes', [], true);
+        protect(this, 'bytes', [], true);
     }
 
-    protected override encodeBytes(encoder: IEncoder): void { encoder.append(this.Bytes); }
+    protected override encodeBytes(encoder: IEncoder): void { encoder.append(this.bytes); }
     protected override decodeBytes(decoder: IDecoder): void {
-        this.Bytes.length = 0;
-        this.Bytes.push(...decoder.read(decoder.remaining));
+        this.bytes.length = 0;
+        this.bytes.push(...decoder.read(decoder.remaining));
     }
 }
 UnkownCustomSection.registerCustomType('unknown')

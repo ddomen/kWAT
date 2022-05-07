@@ -26,7 +26,7 @@ export class ReferenceFunctionInstruction extends ReferenceInstruction<OpCodes.r
     public Function: Types.FunctionType;
     public constructor(fn: Types.FunctionType) { super(OpCodes.ref_func); this.Function = fn; }
     public getFunctionIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.FunctionSection.indexOf(this.Function);
+        let index = context.module.functionSection.indexOf(this.Function);
         if(!pass && index < 0) { throw new KWatError('Reference Instruction invalid function reference'); }
         return index;
     }
@@ -37,8 +37,8 @@ export class ReferenceFunctionInstruction extends ReferenceInstruction<OpCodes.r
     }
     public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): ReferenceFunctionInstruction {
         let index = decoder.uint32();
-        if (!context.module.FunctionSection.Functions[index]) { throw new KWatError('Reference Instruction invalid function reference'); }
-        return new ReferenceFunctionInstruction(context.module.FunctionSection.Functions[index]!);
+        if (!context.module.functionSection.functions[index]) { throw new KWatError('Reference Instruction invalid function reference'); }
+        return new ReferenceFunctionInstruction(context.module.functionSection.functions[index]!);
     }
 }
 ReferenceFunctionInstruction.registerInstruction(OpCodes.ref_func);

@@ -22,27 +22,27 @@ import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
 */
 export class LimitType implements IEncodable {
     /** Minimal value */
-    public Min: number;
+    public min: number;
     /** Maximal value (undedfined for unlimited) */
-    public Max: number | undefined;
+    public max: number | undefined;
 
     /** Build a limit tuple 
      * @param {number} [min=0] minimal value
      * @param {(number|undefined)} [max=undefined] maximal value (undefined for unlimited)
      */
     public constructor(min: number = 0, max?: number) {
-        this.Min = min;
-        this.Max = max;
+        this.min = min;
+        this.max = max;
     }
     
     /** Deep copy the current object
      * @return {TableType} the deep copy of the limit
      */
-    public clone(): LimitType { return new LimitType(this.Min, this.Max); }
+    public clone(): LimitType { return new LimitType(this.min, this.max); }
 
     public encode(encoder: IEncoder): void {
-        if (typeof(this.Max) !== 'undefined') { encoder.uint8(0x01).uint32(this.Min).uint32(this.Max); }
-        else { encoder.uint8(0x00).uint32(this.Min); }
+        if (typeof(this.max) !== 'undefined') { encoder.uint8(0x01).uint32(this.min).uint32(this.max); }
+        else { encoder.uint8(0x00).uint32(this.min); }
     }
 
     /** Check whether another value describes the same limit
@@ -53,8 +53,8 @@ export class LimitType implements IEncodable {
     public equals(other: any): boolean {
         return this === other || (
                 other instanceof LimitType &&
-                this.Max === other.Max &&
-                this.Min === other.Min
+                this.max === other.max &&
+                this.min === other.min
         );
     }
 

@@ -98,108 +98,108 @@ export type WasmOptions = {
 export class Module implements IEncodable<WasmOptions> {
 
     /** The version used for this Wasm module (v1 default) */
-    public Version: number;
+    public version: number;
 
     /** The type section of the module.
      * Declares a table of type indexes and their declarations.
      * @readonly
      * @see {@link Sections.TypeSection}
     */
-    public readonly TypeSection!: Sections.TypeSection;
+    public readonly typeSection!: Sections.TypeSection;
     /** The function section of the module.
      * Declares a table of function index and their respective type.
      * @readonly
      * @see {@link Sections.FunctionSection}
     */
-    public readonly FunctionSection!: Sections.FunctionSection;
+    public readonly functionSection!: Sections.FunctionSection;
     /** The table section of the module.
      * Contains the module table declarations.
      * @readonly
      * @see {@link Sections.TableSection}
     */
-    public readonly TableSection!: Sections.TableSection;
+    public readonly tableSection!: Sections.TableSection;
     /** The memory section of the module.
      * Contains the module memory declarations.
      * @readonly
      * @see {@link Sections.MemorySection}
     */
-    public readonly MemorySection!: Sections.MemorySection;
+    public readonly memorySection!: Sections.MemorySection;
     /** The global section of the module.
      * Contains mutable and unmutable global variable descriptions.
      * @readonly
      * @see {@link Sections.GlobalSection}
     */
-    public readonly GlobalSection!: Sections.GlobalSection;
+    public readonly globalSection!: Sections.GlobalSection;
     /** The element section of the module.
      * Contains the data that initialize the module tables.
      * @readonly
      * @see {@link Sections.ElementSection}
     */
-    public readonly ElementSection!: Sections.ElementSection;
+    public readonly elementSection!: Sections.ElementSection;
     /** The data section of the module.
      * Contains the data that initialize the module memories.
      * @readonly
      * @see {@link Sections.DataSection}
     */
-    public readonly DataSection!: Sections.DataSection;
+    public readonly dataSection!: Sections.DataSection;
     /** The start section of the module
      * Describes the start function executed when the module loads.
      * @readonly
      * @see {@link Sections.StartSection}
     */
-    public readonly StartSection!: Sections.StartSection;
+    public readonly startSection!: Sections.StartSection;
     /** The import section of the module
      * Contains a map of imported types and their names.
      * @readonly
      * @see {@link Sections.ImportSection}
     */
-    public readonly ImportSection!: Sections.ImportSection;
+    public readonly importSection!: Sections.ImportSection;
     /** The export section of the module.
      * Contains a map of exported types and their names.
      * @readonly
      * @see {@link Sections.ExportSection}
     */
-    public readonly ExportSection!: Sections.ExportSection;
+    public readonly exportSection!: Sections.ExportSection;
     /** The data count section of the module.
      * Describes the length of the data section,
      * will be automatically calculated.
      * @readonly
      * @see {@link Sections.DataCountSection}
     */
-    public readonly DataCountSection!: Sections.DataCountSection;
+    public readonly dataCountSection!: Sections.DataCountSection;
     /** The type section of the module.
      * Contains the body of the declared functions.
      * @readonly
      * @see {@link Sections.CodeSection}
     */
-    public readonly CodeSection!: Sections.CodeSection;
+    public readonly codeSection!: Sections.CodeSection;
     /** The custom sections of the module.
      * Is an array of the custom sections
      * (eg. debug names, source maps, etc)
      * @readonly
      * @see {@link Sections.CustomSection}
     */
-    public readonly CustomSections!: Sections.CustomSection[];
+    public readonly customSections!: Sections.CustomSection[];
 
     /** An array of all the sections of this module
      * sorted by precedence as described by the standards.
      * The order will also be the order in the physical memory.
     */
-    public get Sections(): Sections.Section[] {
+    public get sections(): Sections.Section[] {
         return [
-            this.TypeSection,
-            this.FunctionSection,
-            this.TableSection,
-            this.MemorySection,
-            this.GlobalSection,
-            this.ElementSection,
-            this.DataCountSection,
-            this.DataSection,
-            this.StartSection,
-            this.ImportSection,
-            this.ExportSection,
-            this.CodeSection,
-            ...this.CustomSections,
+            this.typeSection,
+            this.functionSection,
+            this.tableSection,
+            this.memorySection,
+            this.globalSection,
+            this.elementSection,
+            this.dataCountSection,
+            this.dataSection,
+            this.startSection,
+            this.importSection,
+            this.exportSection,
+            this.codeSection,
+            ...this.customSections,
         ].sort((s1, s2) => s1.precedence - s2.precedence);
     }
 
@@ -208,20 +208,20 @@ export class Module implements IEncodable<WasmOptions> {
      * @param {number} [version=1] the Wasm version used
      */
     constructor(version: number = 1) {
-        this.Version = version;
-        protect(this, 'TypeSection', new Sections.TypeSection(), true);
-        protect(this, 'FunctionSection', new Sections.FunctionSection(), true);
-        protect(this, 'TableSection', new Sections.TableSection(), true);
-        protect(this, 'MemorySection', new Sections.MemorySection(), true);
-        protect(this, 'GlobalSection', new Sections.GlobalSection(), true);
-        protect(this, 'ElementSection', new Sections.ElementSection(), true);
-        protect(this, 'StartSection', new Sections.StartSection(), true);
-        protect(this, 'ImportSection', new Sections.ImportSection(), true);
-        protect(this, 'ExportSection', new Sections.ExportSection(), true);
-        protect(this, 'DataSection', new Sections.DataSection(), true);
-        protect(this, 'DataCountSection', new Sections.DataCountSection(), true);
-        protect(this, 'CodeSection', new Sections.CodeSection(), true);
-        protect(this, 'CustomSections', [], true);
+        this.version = version;
+        protect(this, 'typeSection', new Sections.TypeSection(), true);
+        protect(this, 'functionSection', new Sections.FunctionSection(), true);
+        protect(this, 'tableSection', new Sections.TableSection(), true);
+        protect(this, 'memorySection', new Sections.MemorySection(), true);
+        protect(this, 'globalSection', new Sections.GlobalSection(), true);
+        protect(this, 'elementSection', new Sections.ElementSection(), true);
+        protect(this, 'startSection', new Sections.StartSection(), true);
+        protect(this, 'importSection', new Sections.ImportSection(), true);
+        protect(this, 'exportSection', new Sections.ExportSection(), true);
+        protect(this, 'dataSection', new Sections.DataSection(), true);
+        protect(this, 'dataCountSection', new Sections.DataCountSection(), true);
+        protect(this, 'codeSection', new Sections.CodeSection(), true);
+        protect(this, 'customSections', [], true);
     }
 
     /** Encode this module through an encoder
@@ -233,12 +233,12 @@ export class Module implements IEncodable<WasmOptions> {
         options = Object.assign({}, DefaultOptions, options)
         const e = encoder.spawn();
         e.relaxation = options.extendedLEB128 ? Relaxations.Full : Relaxations.Canonical;
-        let sects = this.Sections;
+        let sects = this.sections;
         if (!options.debugNames) { sects = sects.filter(s => !(s instanceof Sections.CustomSections.NameCustomSection)); }
         if (!options.customSections) { sects = sects.filter(s => !(s instanceof Sections.CustomSection)); }
         e
             .uint32(ModuleMagic, Relaxations.None)
-            .uint32(this.Version, Relaxations.None)
+            .uint32(this.version, Relaxations.None)
             .array(sects, this, options as WasmOptions)
         ;
         encoder.append(e);
@@ -254,7 +254,7 @@ export class Module implements IEncodable<WasmOptions> {
             throw new KWatError('Invalid Module Magic: 0x' + magic.toString(16) + ' (0x' + ModuleMagic.toString(16) + ')');
         }
         const m = new Module();
-        m.Version = decoder.uint32(Relaxations.None);
+        m.version = decoder.uint32(Relaxations.None);
         let type: number, size: number, precedence: number = 0,
             slice: IDecoder, sections: IDecoder[] = [];
         while (decoder.remaining) {
@@ -263,7 +263,7 @@ export class Module implements IEncodable<WasmOptions> {
             size = decoder.uint32();
             slice = decoder.slice(size);
             if (type === Sections.SectionTypes.custom) {
-                m.CustomSections.push(Sections.CustomSection.decode(slice).after(precedence));
+                m.customSections.push(Sections.CustomSection.decode(slice).after(precedence));
             }
             else if (sections[type]) { throw new KWatError('Duplicated Section type: ' + type); }
             else {
@@ -271,9 +271,9 @@ export class Module implements IEncodable<WasmOptions> {
                 sections[type] = slice;
             }
         }
-        let section, modSects = m.Sections;
+        let section, modSects = m.sections;
         for (let i in sections) {
-            section = modSects.find(s => s.Type == parseInt(i));
+            section = modSects.find(s => s.type == parseInt(i));
             if (!section) { throw new KWatError('Module Section not found: ' + i); }
             section.decode(sections[i]!, m);
         }

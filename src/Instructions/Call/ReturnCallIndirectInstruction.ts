@@ -25,8 +25,8 @@ import type { ExpressionEncodeContext, StackEdit } from '../Instruction';
 export class ReturnCallIndirectInstruction extends AbstractCallInstruction<OpCodes.return_call_indirect> {
     public override get stack(): StackEdit {
         return [
-            this.Type.Parameters.slice().concat([ Types.Type.i32 ]),
-            this.Type.Results.slice()
+            this.Type.parameters.slice().concat([ Types.Type.i32 ]),
+            this.Type.results.slice()
         ];
     }
     public Type: Types.FunctionType;
@@ -37,12 +37,12 @@ export class ReturnCallIndirectInstruction extends AbstractCallInstruction<OpCod
         this.Table = table;
     }
     public getTypeIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.TypeSection.indexOf(this.Type);
+        let index = context.module.typeSection.indexOf(this.Type);
         if(!pass && index < 0) { throw new KWatError('Call Indirect Instruction invalid type reference'); }
         return index;
     }
     public getTableIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.TableSection.Tables.indexOf(this.Table);
+        let index = context.module.tableSection.tables.indexOf(this.Table);
         if(!pass && index < 0) { throw new KWatError('Call Indirect Instruction invalid table reference'); }
         return index;
     }
@@ -55,12 +55,12 @@ export class ReturnCallIndirectInstruction extends AbstractCallInstruction<OpCod
     public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): ReturnCallIndirectInstruction {
         if (!context.options.tailCall) { throw new UnsupportedExtensionError('tail call'); }
         let type = decoder.uint32();
-        if (!context.module.TypeSection.Types[type]) { throw new KWatError('Call Indirect Instruction invalid type reference'); }
+        if (!context.module.typeSection.types[type]) { throw new KWatError('Call Indirect Instruction invalid type reference'); }
         let table = decoder.uint32();
-        if (!context.module.TableSection.Tables[table]) { throw new KWatError('Call Indirect Instruction invalid table reference'); }
+        if (!context.module.tableSection.tables[table]) { throw new KWatError('Call Indirect Instruction invalid table reference'); }
         return new ReturnCallIndirectInstruction(
-            context.module.TypeSection.Types[type]!,
-            context.module.TableSection.Tables[table]!
+            context.module.typeSection.types[type]!,
+            context.module.tableSection.tables[table]!
         );
     }
 }

@@ -25,12 +25,12 @@ import type { IEncoder, IDecoder } from '../Encoding';
 /** A section containing all the table definitions of the module */
 export class TableSection extends Section<SectionTypes.table> {
     /** The defined table descriptions */
-    public readonly Tables!: Types.TableType[];
+    public readonly tables!: Types.TableType[];
 
     /** Create a new empty table section */
     public constructor() {
         super(SectionTypes.table);
-        protect(this, 'Tables', [], true);
+        protect(this, 'tables', [], true);
     }
 
     /** Add a new table description to this section if not already present
@@ -38,29 +38,29 @@ export class TableSection extends Section<SectionTypes.table> {
      * @returns {boolean} success of the insertion
      */
     public add(table: Types.TableType): boolean {
-        if (this.Tables.indexOf(table) == -1){
-            this.Tables.unshift(table);
+        if (this.tables.indexOf(table) == -1){
+            this.tables.unshift(table);
             return true;
         }
         return false;
     }
 
     public override contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
-        if (!this.Tables.length) { return; }
+        if (!this.tables.length) { return; }
         if (!opts.multipleTables) {
-            let tabs = this.Tables;
+            let tabs = this.tables;
             tabs.push(
-                ...mod.ImportSection.Imports
-                    .map(i => i.isTable() ? i.Description : null!)
+                ...mod.importSection.imports
+                    .map(i => i.isTable() ? i.description : null!)
                     .filter(x => !!x)    
             );
             if (tabs.length > 1) { throw new KWatError('Multiple table declaration detected'); }
         }
-        encoder.vector(this.Tables);
+        encoder.vector(this.tables);
     }
 
     public override decode(decoder: IDecoder) {
-        this.Tables.length = 0;
-        this.Tables.push(...decoder.vector(Types.TableType));
+        this.tables.length = 0;
+        this.tables.push(...decoder.vector(Types.TableType));
     }
 }

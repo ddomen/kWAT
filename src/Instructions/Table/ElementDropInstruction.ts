@@ -29,7 +29,7 @@ export class ElementDropInstruction extends TableInstruction<OpCodesExt1.elem_dr
         this.Element = element;
     }
     public getElementIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.ElementSection.Elements.indexOf(this.Element);
+        let index = context.module.elementSection.elements.indexOf(this.Element);
         if(!pass && index < 0) { throw new KWatError('Element Drop Instruction invalid element reference'); }
         return index;
     }
@@ -41,8 +41,8 @@ export class ElementDropInstruction extends TableInstruction<OpCodesExt1.elem_dr
     }
     public static override decode(decoder: IDecoder, context: ExpressionDecodeContext): ElementDropInstruction {
         let elem = decoder.uint32();
-        if (!context.module.ElementSection.Elements[elem]) { throw new KWatError('Element Drop Instruction invalid element reference'); }
-        return new ElementDropInstruction(context.module.ElementSection.Elements[elem]!);
+        if (!context.module.elementSection.elements[elem]) { throw new KWatError('Element Drop Instruction invalid element reference'); }
+        return new ElementDropInstruction(context.module.elementSection.elements[elem]!);
     }
 }
 ElementDropInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.elem_drop);

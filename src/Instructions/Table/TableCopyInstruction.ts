@@ -32,7 +32,7 @@ export class TableCopyInstruction extends TableInstruction<OpCodesExt1.table_cop
         this.Destination = destination;
     }
     public getDestinationIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.TableSection.Tables.indexOf(this.Destination);
+        let index = context.module.tableSection.tables.indexOf(this.Destination);
         if(!pass && index < 0) { throw new KWatError('Table Instruction invalid destination table reference'); }
         return index;
     }
@@ -45,12 +45,12 @@ export class TableCopyInstruction extends TableInstruction<OpCodesExt1.table_cop
     }
     public static override decode(decoder: IDecoder, context: ExpressionDecodeContext): TableCopyInstruction {
         let src = decoder.uint32();
-        if (!context.module.TableSection.Tables[src]) { throw new KWatError('Table Copy Instruction invalid source table reference'); }
+        if (!context.module.tableSection.tables[src]) { throw new KWatError('Table Copy Instruction invalid source table reference'); }
         let dest = decoder.uint32();
-        if (!context.module.TableSection.Tables[dest]) { throw new KWatError('Table Copy Instruction invalid destination table reference'); }
+        if (!context.module.tableSection.tables[dest]) { throw new KWatError('Table Copy Instruction invalid destination table reference'); }
         return new TableCopyInstruction(
-            context.module.TableSection.Tables[src]!,
-            context.module.TableSection.Tables[dest]!
+            context.module.tableSection.tables[src]!,
+            context.module.tableSection.tables[dest]!
         );
     }
 }

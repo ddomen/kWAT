@@ -34,7 +34,7 @@ export abstract class TableInstruction<O extends TableInstructionForwardCodes=Ta
         this.Table = table;
     }
     public getTableIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.TableSection.Tables.indexOf(this.Table);
+        let index = context.module.tableSection.tables.indexOf(this.Table);
         if(!pass && index < 0) { throw new KWatError('Table Instruction invalid table reference'); }
         return index;
     }

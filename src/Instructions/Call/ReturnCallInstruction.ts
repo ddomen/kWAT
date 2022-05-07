@@ -23,14 +23,14 @@ import type { ExpressionEncodeContext, StackEdit } from '../Instruction';
 import type * as Types from '../../Types';
 
 export class ReturnCallInstruction extends AbstractCallInstruction<OpCodes.return_call> {
-    public override get stack(): StackEdit { return [ this.Function.Parameters.slice(), this.Function.Results.slice() ]; }
+    public override get stack(): StackEdit { return [ this.Function.parameters.slice(), this.Function.results.slice() ]; }
     public Function: Types.FunctionType;
     public constructor(fn: Types.FunctionType) {
         super(OpCodes.return_call);
         this.Function = fn;
     }
     public getFunctionIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.TypeSection.indexOf(this.Function);
+        let index = context.module.typeSection.indexOf(this.Function);
         if(!pass && index < 0) { throw new KWatError('Call Instruction invalid function reference'); }
         return index;
     }
@@ -42,8 +42,8 @@ export class ReturnCallInstruction extends AbstractCallInstruction<OpCodes.retur
     }
     public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): ReturnCallInstruction {
         let index = decoder.uint32();
-        if (!context.module.FunctionSection.Functions[index]) { throw new KWatError('Call Instruction invalid function reference'); }
-        return new ReturnCallInstruction(context.module.FunctionSection.Functions[index]!);
+        if (!context.module.functionSection.functions[index]) { throw new KWatError('Call Instruction invalid function reference'); }
+        return new ReturnCallInstruction(context.module.functionSection.functions[index]!);
     }
 }
 ReturnCallInstruction.registerInstruction(OpCodes.return_call);

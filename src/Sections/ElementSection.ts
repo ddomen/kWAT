@@ -89,24 +89,24 @@ export enum ElementKind {
 /** A section containing all element definitions for table initialization */
 export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
     /** The mode used by the segment */
-    public Mode: ElementMode;
+    public mode: ElementMode;
     /** The kind of stored memory */
-    public Kind: ElementKind | null;
+    public kind: ElementKind | null;
 
     /** The target table where to store the element.
      * This is valid only for active segments.
      * @see {@link ElementMode}
      */
-    public Table: TableType | null;
+    public table: TableType | null;
     /** The (first) element initialization expression
      *```
      * TABLE:
      * elem1 -> expression()
      * ```
     */
-    public Expression: Expression | null;
+    public expression: Expression | null;
     /** The type of the element */
-    public Reference: ReferenceType | null;
+    public reference: ReferenceType | null;
     /** The functions used to copy the pointers into the table.
      * ```
      * TABLE:
@@ -115,7 +115,7 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
      * ...
      * ```
      */
-    public readonly Functions!: FunctionType[];
+    public readonly functions!: FunctionType[];
     /** The subsequent elements initialization expressions
      * ```
      * TABLE:
@@ -125,135 +125,135 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
      * ...
      * ```
      */
-    public readonly Initialization!: Expression[];
+    public readonly initialization!: Expression[];
 
     /** Create a new empty element segment */
     public constructor() {
-        this.Mode = ElementMode.ActiveKind;
-        this.Kind = null;
-        this.Table = null;
-        this.Expression = null;
-        this.Reference = null;
-        protect(this, 'Functions', [], true)
-        protect(this, 'Initialization', [], true)
+        this.mode = ElementMode.ActiveKind;
+        this.kind = null;
+        this.table = null;
+        this.expression = null;
+        this.reference = null;
+        protect(this, 'functions', [], true)
+        protect(this, 'initialization', [], true)
     }
 
     /** True if the actual element mode includes an active mode */
-    public get isActive(): boolean { return !(this.Mode & 0x01); }
-    public set isActive(value: boolean) { value ? (this.Mode &= 0x06) : (this.Mode |= 0x01); }
+    public get isActive(): boolean { return !(this.mode & 0x01); }
+    public set isActive(value: boolean) { value ? (this.mode &= 0x06) : (this.mode |= 0x01); }
     
     /** True if the actual element mode includes a passive mode */
-    public get isPassive(): boolean { return !!(this.Mode & 0x03); }
+    public get isPassive(): boolean { return !!(this.mode & 0x03); }
     public set isPassive(value: boolean) {
-        if (value) { this.Mode |= 0x03; }
-        else if (this.isDeclarative) { this.Mode &= 0x05; }
+        if (value) { this.mode |= 0x03; }
+        else if (this.isDeclarative) { this.mode &= 0x05; }
     }
 
     /** True if the actual element mode includes a declarative mode */
-    public get isDeclarative(): boolean { return !!(this.Mode & 0x01) && !(this.Mode & 0x02); }
+    public get isDeclarative(): boolean { return !!(this.mode & 0x01) && !(this.mode & 0x02); }
     public set isDeclarative(value: boolean) { 
-        if (value) { this.Mode |= 0x01; this.Mode &= 0x05; }
-        else if (this.isPassive) { this.Mode |= 0x02; }
+        if (value) { this.mode |= 0x01; this.mode &= 0x05; }
+        else if (this.isPassive) { this.mode |= 0x02; }
     }
 
     /** True if the actual element mode must declare explicitly a table index */
-    public get hasExplicitTable(): boolean { return this.isActive && !!(this.Mode & 0x02) }
+    public get hasExplicitTable(): boolean { return this.isActive && !!(this.mode & 0x02) }
     /** True if the actual element mode uses kind reference */
     public get usesElementKind(): boolean { return !this.usesElementType; }
     /** True if the actual element mode uses type reference */
-    public get usesElementType(): boolean { return !!(this.Mode & 0x04); }
+    public get usesElementType(): boolean { return !!(this.mode & 0x04); }
 
-    /** Retrieve the function indices of the {@link Functions} property array
+    /** Retrieve the function indices of the {@link functions} property array
      * by looking at the module type section.
      * @param {Module} mod the module holding the type section
      * @param {boolean} [pass] don't throw errors if the operation fails
      * @return {number[]} the indices of the types relative to the
-     *                      used {@link Functions}
+     *                      used {@link functions}
      */
     public getFunctionIndices(mod: Module, pass?: boolean): number[] {
-        let idxs = this.Functions.map(f => mod.TypeSection.indexOf(f));
+        let idxs = this.functions.map(f => mod.typeSection.indexOf(f));
         let wrong;
         if (!pass && idxs.some(i => (wrong = i, i < 0))) { throw new KWatError('Invalid function definition index (at: ' + wrong + ')') }
         return idxs;
     }
 
-    /** Retrieve the table indix of the {@link Table} property
+    /** Retrieve the table indix of the {@link table} property
      * by looking at the module table section.
      * @param {Module} mod the module holding the table section
      * @param {boolean} [pass] don't throw errors if the operation fails
      * @return {number[]} the index of the table or `-1` if not found
      */
     public getTableIndex(mod: Module, pass?: boolean): number {
-        if (!pass && !this.Table) { throw new KWatError('Invalid ElementSegment Table reference'); }
-        if (!this.Table) { return -1; }
-        let idx = mod.TableSection.Tables.indexOf(this.Table);
+        if (!pass && !this.table) { throw new KWatError('Invalid ElementSegment Table reference'); }
+        if (!this.table) { return -1; }
+        let idx = mod.tableSection.tables.indexOf(this.table);
         if (!pass && idx < 0) { throw new KWatError('Invalid ElementSegment Table reference'); }
         return idx;
     }
 
     public encode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
-        if (this.Mode > ElementMode.MAX || this.Mode < 0) {
-            throw new KWatError('Invalid Element Segment type [0x00, 0x07]: ' + this.Mode);
+        if (this.mode > ElementMode.MAX || this.mode < 0) {
+            throw new KWatError('Invalid Element Segment type [0x00, 0x07]: ' + this.mode);
         }
-        encoder.uint8(this.Mode);
+        encoder.uint8(this.mode);
         let idxs, tid;
-        switch (this.Mode) {
+        switch (this.mode) {
             case ElementMode.ActiveKind:
-                if (!this.Expression || !this.Functions.length) { throw new KWatError('Invalid ElementSegment[ActiveKind]'); }
+                if (!this.expression || !this.functions.length) { throw new KWatError('Invalid ElementSegment[ActiveKind]'); }
                 idxs = this.getFunctionIndices(mod);
                 encoder
-                    .encode(this.Expression, mod, opts)
+                    .encode(this.expression, mod, opts)
                     .vector(idxs, 'uint32');
                 break;
             case ElementMode.DeclarativeKind:
-                if (this.Kind === null || !this.Functions.length) { throw new KWatError('Invalid ElementSegment[DeclarativeKind]'); }
+                if (this.kind === null || !this.functions.length) { throw new KWatError('Invalid ElementSegment[DeclarativeKind]'); }
                 idxs = this.getFunctionIndices(mod);
                 encoder
-                    .uint8(this.Kind)
+                    .uint8(this.kind)
                     .vector(idxs, 'uint32');
                 break;
             case ElementMode.ActiveKindTable:
-                if (!this.Expression || !this.Table || this.Kind === null || !this.Functions.length) { throw new KWatError('Invalid ElementSegment[ActiveKindTable]'); }
+                if (!this.expression || !this.table || this.kind === null || !this.functions.length) { throw new KWatError('Invalid ElementSegment[ActiveKindTable]'); }
                 tid = this.getTableIndex(mod)
                 idxs = this.getFunctionIndices(mod);
                 encoder
                     .uint32(tid)
-                    .encode(this.Expression, mod, opts)
-                    .uint8(this.Kind)
+                    .encode(this.expression, mod, opts)
+                    .uint8(this.kind)
                     .vector(idxs, 'uint32')
                 ;
                 break;
             case ElementMode.PassiveKind:
-                if (this.Kind === null || !this.Functions.length) { throw new KWatError('Invalid ElementSegment[PassiveKind]'); }
+                if (this.kind === null || !this.functions.length) { throw new KWatError('Invalid ElementSegment[PassiveKind]'); }
                 idxs = this.getFunctionIndices(mod);
-                encoder.uint8(this.Kind).vector(idxs, 'uint32');
+                encoder.uint8(this.kind).vector(idxs, 'uint32');
                 break;
             case ElementMode.ActiveType:
-                if (!this.Expression || !this.Initialization.length) { throw new KWatError('Invalid ElementSegment[ActiveType]'); }
-                encoder.encode(this.Expression, mod, opts)
-                        .vector(this.Initialization, mod, opts);
+                if (!this.expression || !this.initialization.length) { throw new KWatError('Invalid ElementSegment[ActiveType]'); }
+                encoder.encode(this.expression, mod, opts)
+                        .vector(this.initialization, mod, opts);
                 break;
             case ElementMode.DeclarativeType:
-                if (!this.Reference || !this.Initialization.length) { throw new KWatError('Invalid ElementSegment[DeclarativeType]'); }
-                encoder.uint8(this.Reference)
-                        .vector(this.Initialization, mod, opts);
+                if (!this.reference || !this.initialization.length) { throw new KWatError('Invalid ElementSegment[DeclarativeType]'); }
+                encoder.uint8(this.reference)
+                        .vector(this.initialization, mod, opts);
                 break;
             case ElementMode.ActiveTypeTable:
-                if (!this.Table || !this.Expression || !this.Reference || !this.Initialization.length) { throw new KWatError('Invalid ElementSegment[ActiveTypeTable]'); }
+                if (!this.table || !this.expression || !this.reference || !this.initialization.length) { throw new KWatError('Invalid ElementSegment[ActiveTypeTable]'); }
                 tid = this.getTableIndex(mod);
                 encoder
                     .uint32(tid)
-                    .encode(this.Expression, mod, opts)
-                    .uint8(this.Reference)
-                    .vector(this.Initialization, mod, opts)
+                    .encode(this.expression, mod, opts)
+                    .uint8(this.reference)
+                    .vector(this.initialization, mod, opts)
                 ;
                 break;
             case ElementMode.PassiveType:
-                if (!this.Reference || !this.Initialization.length) { throw new KWatError('Invalid ElementSegment[PassiveType]'); }
-                encoder.uint8(this.Reference)
-                        .vector(this.Initialization, mod, opts);
+                if (!this.reference || !this.initialization.length) { throw new KWatError('Invalid ElementSegment[PassiveType]'); }
+                encoder.uint8(this.reference)
+                        .vector(this.initialization, mod, opts);
                 break;
-            default: throw new KWatError('Invalid ElementSegment Type: ' + this.Mode)
+            default: throw new KWatError('Invalid ElementSegment Type: ' + this.mode)
         }
     }
 
@@ -268,64 +268,64 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
         let segment = new ElementSegment();
         switch (type) {
             case ElementMode.ActiveKind:
-                segment.Expression = decoder.decode(Expression, mod);
+                segment.expression = decoder.decode(Expression, mod);
                 idxs = decoder.vector('uint32');
-                segment.Functions.push(...idxs.map(id => mod.FunctionSection.Functions[id]!));
-                if (segment.Functions.some(f => !f)) {
+                segment.functions.push(...idxs.map(id => mod.functionSection.functions[id]!));
+                if (segment.functions.some(f => !f)) {
                     throw new KWatError('Invalid Element Segment function reference');
                 }
                 break;
             case ElementMode.DeclarativeKind:
-                segment.Kind = decoder.uint8();
+                segment.kind = decoder.uint8();
                 idxs = decoder.vector('uint32');
-                segment.Functions.push(...idxs.map(id => mod.FunctionSection.Functions[id]!));
-                if (segment.Functions.some(f => !f)) {
+                segment.functions.push(...idxs.map(id => mod.functionSection.functions[id]!));
+                if (segment.functions.some(f => !f)) {
                     throw new KWatError('Invalid Element Segment function reference');
                 }
                 break;
             case ElementMode.ActiveKindTable:
                 tid = decoder.uint32();
-                segment.Expression = decoder.decode(Expression, mod);
-                segment.Kind = decoder.uint8();
+                segment.expression = decoder.decode(Expression, mod);
+                segment.kind = decoder.uint8();
                 idxs = decoder.vector('uint32');
-                if (!mod.TableSection.Tables[tid]) {
+                if (!mod.tableSection.tables[tid]) {
                     throw new KWatError('Invalid Element Segment table reference');
                 }
-                segment.Table = mod.TableSection.Tables[tid]!;
-                segment.Functions.push(...idxs.map(id => mod.FunctionSection.Functions[id]!));
-                if (segment.Functions.some(f => !f)) {
+                segment.table = mod.tableSection.tables[tid]!;
+                segment.functions.push(...idxs.map(id => mod.functionSection.functions[id]!));
+                if (segment.functions.some(f => !f)) {
                     throw new KWatError('Invalid Element Segment function reference');
                 }
                 break;
             case ElementMode.PassiveKind:
-                segment.Kind = decoder.uint8();
+                segment.kind = decoder.uint8();
                 idxs = decoder.vector('uint32');
-                segment.Functions.push(...idxs.map(id => mod.FunctionSection.Functions[id]!));
-                if (segment.Functions.some(f => !f)) {
+                segment.functions.push(...idxs.map(id => mod.functionSection.functions[id]!));
+                if (segment.functions.some(f => !f)) {
                     throw new KWatError('Invalid Element Segment function reference');
                 }
                 break;
             case ElementMode.ActiveType:
-                segment.Expression = decoder.decode(Expression, mod);
-                segment.Initialization.push(...decoder.vector(Expression, mod));
+                segment.expression = decoder.decode(Expression, mod);
+                segment.initialization.push(...decoder.vector(Expression, mod));
                 break;
             case ElementMode.DeclarativeType:
-                segment.Reference = decoder.uint8();
-                segment.Initialization.push(...decoder.vector(Expression, mod));
+                segment.reference = decoder.uint8();
+                segment.initialization.push(...decoder.vector(Expression, mod));
                 break;
             case ElementMode.ActiveTypeTable:
                 tid = decoder.uint32();
-                if (!mod.TableSection.Tables[tid]) {
+                if (!mod.tableSection.tables[tid]) {
                     throw new KWatError('Invalid Element Segment table reference');
                 }
-                segment.Table = mod.TableSection.Tables[tid]!;
-                segment.Expression = decoder.decode(Expression, mod);
-                segment.Reference = decoder.uint8();
-                segment.Initialization.push(...decoder.vector(Expression, mod));
+                segment.table = mod.tableSection.tables[tid]!;
+                segment.expression = decoder.decode(Expression, mod);
+                segment.reference = decoder.uint8();
+                segment.initialization.push(...decoder.vector(Expression, mod));
                 break;
             case ElementMode.PassiveType:
-                segment.Reference = decoder.uint8();
-                segment.Initialization.push(...decoder.vector(Expression, mod));
+                segment.reference = decoder.uint8();
+                segment.initialization.push(...decoder.vector(Expression, mod));
                 break;
             default: throw new KWatError('Invalid ElementSegment Type: ' + type)
         }
@@ -336,21 +336,21 @@ export class ElementSegment implements IEncodable<[Module, WasmOptions]> {
 /** A section containing all the element definitions and initializations of the module */
 export class ElementSection extends Section<SectionTypes.element> {
     /** All the elements defined/initialized in the section */
-    public readonly Elements!: ElementSegment[];
+    public readonly elements!: ElementSegment[];
 
     /** Create a new empty element section */
     public constructor() {
         super(SectionTypes.element);
-        protect(this, 'Elements', [], true);
+        protect(this, 'elements', [], true);
     }
 
     public override contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
-        if (!this.Elements.length) { return; }
-        encoder.vector(this.Elements, mod, opts);
+        if (!this.elements.length) { return; }
+        encoder.vector(this.elements, mod, opts);
     }
 
     public decode(decoder: IDecoder, mod: Module): void {
-        this.Elements.length = 0;
-        this.Elements.push(...decoder.vector(ElementSegment, mod));
+        this.elements.length = 0;
+        this.elements.push(...decoder.vector(ElementSegment, mod));
     }
 }

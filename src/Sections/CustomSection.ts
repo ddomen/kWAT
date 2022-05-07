@@ -23,7 +23,7 @@ import type { IEncoder, IDecoder } from '../Encoding';
 type CustomSectionCtor = { new(name: string): CustomSection };
 export abstract class CustomSection extends Section<SectionTypes.custom> {
     /** The name of the custom section */
-    public readonly Name!: string;
+    public readonly name!: string;
 
     public override set precedence(value: number) { this._precedence = value; }
 
@@ -33,8 +33,8 @@ export abstract class CustomSection extends Section<SectionTypes.custom> {
      */
     protected constructor(name: string, readonly: boolean=true) {
         super(SectionTypes.custom);
-        if (readonly) { protect(this, 'Name', (name || '') + '', true); }
-        else { this.Name = name || ''; }
+        if (readonly) { protect(this, 'name', (name || '') + '', true); }
+        else { this.name = name || ''; }
     }
 
     /** Set the precedence of the custom section to be
@@ -71,8 +71,8 @@ export abstract class CustomSection extends Section<SectionTypes.custom> {
     }
 
     protected contentEncode(encoder: IEncoder): void {
-        if (typeof(this.Name) !== 'string' || !this.Name) { throw new KWatError('Invalid Custom Section name: \'' + this.Name + '\'')}
-        encoder.vector(this.Name);
+        if (typeof(this.name) !== 'string' || !this.name) { throw new KWatError('Invalid Custom Section name: \'' + this.name + '\'')}
+        encoder.vector(this.name);
         this.encodeBytes(encoder);
     }
         

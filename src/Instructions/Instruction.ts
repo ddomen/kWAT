@@ -137,7 +137,7 @@ export abstract class Instruction<O extends OpCodes=OpCodes> implements IEncodab
     public static checkStack(instructions: Instruction[], signature: Types.FunctionType): boolean;
     public static checkStack(instructions: Instruction[], params: Types.ResultType, results: Types.ResultType): boolean;
     public static checkStack(instructions: Instruction[], stack: DefiniteStackEdit | Types.ResultType | Types.FunctionType, results?: Types.ResultType): boolean {
-        if (stack instanceof Types.FunctionType) { stack = [ stack.Parameters, stack.Results ]; }
+        if (stack instanceof Types.FunctionType) { stack = [ stack.parameters, stack.results ]; }
         else if (Array.isArray(results)) { stack = [ stack as Types.ResultType, results ]; }
         if (!Array.isArray(stack)) { throw new TypeError('Invalid argument: second argument must be of type Stack|FunctionType|ResultType'); }
         if (!Array.isArray(stack[0]) || !Array.isArray(stack[1])) {

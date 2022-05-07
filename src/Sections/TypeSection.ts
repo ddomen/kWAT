@@ -23,12 +23,12 @@ import type { IEncoder, IDecoder } from '../Encoding';
 /** A section containing all the type definitions of the module */
 export class TypeSection extends Section<SectionTypes.type> {
 
-    public readonly Types!: Types.FunctionType[];
+    public readonly types!: Types.FunctionType[];
 
     /** Creates an empty type section */
     public constructor() {
         super(SectionTypes.type);
-        protect(this, 'Types', [], true);
+        protect(this, 'types', [], true);
     }
 
     /** Retrieve the index of a type present in this section
@@ -37,7 +37,7 @@ export class TypeSection extends Section<SectionTypes.type> {
      * @returns {number} the index of the type, `-1` if not found
      */
     public indexOf(type: Types.FunctionType): number {
-        return this.Types.findIndex(f => f.equals(type));
+        return this.types.findIndex(f => f.equals(type));
     }
     /** Add a new type to this section if not already present
      * (by checking the signature)
@@ -45,21 +45,21 @@ export class TypeSection extends Section<SectionTypes.type> {
      * @returns {boolean} success of the insertion
      */
     public add(type: Types.FunctionType): boolean {
-        if (!this.Types.some(t => t.equals(type))) {
-            this.Types.push(type.clone())
+        if (!this.types.some(t => t.equals(type))) {
+            this.types.push(type.clone())
             return true;
         }
         return false;
     }
 
     protected override contentEncode(encoder: IEncoder): void {
-        if (!this.Types.length) { return; }
-        encoder.vector(this.Types);
+        if (!this.types.length) { return; }
+        encoder.vector(this.types);
     }
 
     public decode(decoder: IDecoder): void {
-        this.Types.length = 0;
-        this.Types.push(...decoder.vector(Types.FunctionType));
+        this.types.length = 0;
+        this.types.push(...decoder.vector(Types.FunctionType));
     }
     
 }

@@ -458,46 +458,46 @@ export class ModuleBuilder implements IBuilder<Module> {
     public build(): Module {
         const m = new Module(this._version);
         const names = new CustomSections.NameCustomSection();
-        m.CustomSections.push(names);
+        m.customSections.push(names);
         for (const name in this._imports) {
             const mn = (name + '').split('.', 2);
             const im = new ImportSegment(mn[0]!, mn[1]!, this._imports[name]!);
-            m.ImportSection.add(im, m);
+            m.importSection.add(im, m);
         }
         for (const name in this._globals) {
             const g = this._globals[name]!;
             const gv = new GlobalVariable(
-                g.Variable.Type,
-                new Expression(g.Initialization.Instructions),
-                g.Variable.Constant
+                g.variable.type,
+                new Expression(g.initialization.Instructions),
+                g.variable.constant
             );
-            m.GlobalSection.add(gv);
+            m.globalSection.add(gv);
         }
         for (const _ in this._data) {
             // const d = this._data[index]!;
             const ds = new DataSegment(DataMode.passive);
             throw new KWatError('Data Sections building not yet implemented');
-            m.DataSection.add(ds)
+            m.dataSection.add(ds)
         }
         for (const name in this._memories) {
             const mm = this._memories[name]!;
-            m.MemorySection.add(new LimitType(mm.Min, mm.Max));
+            m.memorySection.add(new LimitType(mm.min, mm.max));
         }
         let keys = Object.keys(this._functions);
         for (const name in this._functions) {
             const def = this._functions[name]!;
-            const i = m.TypeSection.indexOf(this._functions[name]!.type);
-            if (def.exported) { m.ExportSection.add(new ExportSegment(def.exported, def.type)); }
-            m.TypeSection.add(def.type);
-            m.FunctionSection.add(def.type);
-            m.CodeSection.add(new CodeSegment(def.type, def.body, Object.values(def.locals)));
+            const i = m.typeSection.indexOf(this._functions[name]!.type);
+            if (def.exported) { m.exportSection.add(new ExportSegment(def.exported, def.type)); }
+            m.typeSection.add(def.type);
+            m.functionSection.add(def.type);
+            m.codeSection.add(new CodeSegment(def.type, def.body, Object.values(def.locals)));
             if (i !== -1) {
                 names.function(new CustomSections.NameReference(i, name));
-                if (this._starter === name) { m.StartSection.Target = m.TypeSection.Types[i]!; }
+                if (this._starter === name) { m.startSection.target = m.typeSection.types[i]!; }
             }
             def.references.map(k => keys.indexOf(k))
         }
-        if (this._sourcemap) { m.CustomSections.push(new CustomSections.SourceMapSection(this._sourcemap)); }
+        if (this._sourcemap) { m.customSections.push(new CustomSections.SourceMapSection(this._sourcemap)); }
         return m;
     }
 }

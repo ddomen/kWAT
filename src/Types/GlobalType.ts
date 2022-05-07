@@ -23,23 +23,23 @@ import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
 /** Represents a description of a type for a global variable */
 export class GlobalType implements IEncodable<WasmOptions> {
     /** whether the global variable is mutable or not */
-    public Constant: boolean;
+    public constant: boolean;
     /** The type of the global variable */
-    public Type: ValueType;
+    public type: ValueType;
 
     /** Create a new global variable type definition 
      * @param {ValueType} type the type of the global variable
      * @param {boolean} [constant=false] the mutability of the global variable
      */
     public constructor(type: ValueType, constant: boolean = false) {
-        this.Type = type;
-        this.Constant = !!constant;
+        this.type = type;
+        this.constant = !!constant;
     }
 
     /** Deep copy the current object
      * @return {GlobalType} the deep copy of the global variable type definition
      */
-    public clone(): GlobalType { return new GlobalType(this.Type, this.Constant); }
+    public clone(): GlobalType { return new GlobalType(this.type, this.constant); }
 
     /** Check if a given value describes the same
      * global type declaration of this object
@@ -50,16 +50,16 @@ export class GlobalType implements IEncodable<WasmOptions> {
     public equals(other: any): boolean {
         return this === other || (
                 other instanceof GlobalType &&
-                this.Constant === other.Constant &&
-                this.Type === other.Type
+                this.constant === other.constant &&
+                this.type === other.type
         );
     }
 
     public encode(encoder: IEncoder, opts: WasmOptions): void {
-        if (!opts.mutableGlobals && !this.Constant) {
+        if (!opts.mutableGlobals && !this.constant) {
             throw new KWatError('Mutable global detected');
         }
-        encoder.uint8(this.Constant ? 0 : 1).uint8(this.Type);
+        encoder.uint8(this.constant ? 0 : 1).uint8(this.type);
     }
 
     /** Read a global type declaration from a dedcoder 

@@ -24,7 +24,7 @@ import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
 
 
 /** Exchange type descriptor for {@link ImportDescription} */
-type ExchangeNarrower<R extends ImportDescription> = { Description: R };
+type ExchangeNarrower<R extends ImportDescription> = { description: R };
 
 /** All possible types which are exchangeable in import operations */
 export type ImportDescription = Types.FunctionType | Types.TableType | Types.MemoryType | Types.GlobalType;
@@ -32,27 +32,27 @@ export type ImportDescription = Types.FunctionType | Types.TableType | Types.Mem
 /** A part of the import section which describe an import operation */
 export class ImportSegment implements IEncodable<[Types.FunctionType[]]> {
     /** The name of the module from which import the entity */
-    public Module: string;
+    public module: string;
     /** The name of the imported entity */
-    public Name: string;
+    public name: string;
     /** A description of the imported entity */
-    public Description: ImportDescription;
+    public description: ImportDescription;
 
     /** Whether or not the import entity is a function declaration */
     public isFunction(): this is ExchangeNarrower<Types.FunctionType> {
-        return this.Description instanceof Types.FunctionType;
+        return this.description instanceof Types.FunctionType;
     }
     /** Whether or not the import entity is a table declaration */
     public isTable(): this is ExchangeNarrower<Types.TableType> {
-        return this.Description instanceof Types.TableType;
+        return this.description instanceof Types.TableType;
     }
     /** Whether or not the import entity is a memory declaration */
     public isMemory(): this is ExchangeNarrower<Types.MemoryType> {
-        return this.Description instanceof Types.LimitType;
+        return this.description instanceof Types.LimitType;
     }
     /** Whether or not the import entity is a global variable declaration */
     public isGlobal(): this is ExchangeNarrower<Types.GlobalType> {
-        return this.Description instanceof Types.GlobalType;
+        return this.description instanceof Types.GlobalType;
     }
     /** The exchange code of the imported entity */
     public get code(): ExchangeDescriptionCode {
@@ -69,9 +69,9 @@ export class ImportSegment implements IEncodable<[Types.FunctionType[]]> {
      * @param {ImportDescription} description the description of the imported entity
      */
     public constructor(moduleName: string, name: string, description: ImportDescription) {
-        this.Module = moduleName;
-        this.Name = name;
-        this.Description = description;
+        this.module = moduleName;
+        this.name = name;
+        this.description = description;
     }
     
     /** Retrieves the index of the imported entity as a function 
@@ -83,7 +83,7 @@ export class ImportSegment implements IEncodable<[Types.FunctionType[]]> {
      */
     public getIndex(fns: Types.FunctionType[], pass?: boolean): number {
         if (!this.isFunction()) { throw new KWatError('Can not get index from a non-function reference!'); }
-        let index = fns.findIndex(x => x.equals(this.Description as Types.FunctionType));
+        let index = fns.findIndex(x => x.equals(this.description as Types.FunctionType));
         if (!pass && index < 0) { throw new KWatError('Invalid function definition index!') }
         return index;
     }
@@ -96,22 +96,22 @@ export class ImportSegment implements IEncodable<[Types.FunctionType[]]> {
      */
     public equals(other: any): boolean {
         return other instanceof ImportSegment &&
-                this.Name == other.Name &&
-                this.Module == other.Module &&
-                this.Description.equals(other.Description)
+                this.name == other.name &&
+                this.module == other.module &&
+                this.description.equals(other.description)
     }
 
     /** Deep copy the current object
      * @return {ImportSegment} the deep copy of the import definition
      */
-    public clone(): ImportSegment { return new ImportSegment(this.Module, this.Name, this.Description.clone()); }
+    public clone(): ImportSegment { return new ImportSegment(this.module, this.name, this.description.clone()); }
 
     public encode(encoder: IEncoder, context: Types.FunctionType[]) {
         if (this.isFunction()) {
             let index = this.getIndex(context);
             encoder
-                .vector(this.Module)
-                .vector(this.Name)
+                .vector(this.module)
+                .vector(this.name)
                 .uint8(ExchangeDescriptionCode.function)
                 .uint32(index)
             ;
@@ -120,10 +120,10 @@ export class ImportSegment implements IEncodable<[Types.FunctionType[]]> {
             let code = this.code;
             if (code < 0) { throw new KWatError('Invalid import description!'); }
             encoder
-                .vector(this.Module)
-                .vector(this.Name)
+                .vector(this.module)
+                .vector(this.name)
                 .uint8(code)
-                .encode(this.Description)
+                .encode(this.description)
             ;
         }
     }
@@ -141,10 +141,10 @@ export class ImportSegment implements IEncodable<[Types.FunctionType[]]> {
         switch (type) {
             case ExchangeDescriptionCode.function: {
                 let index = decoder.uint32();
-                if (!mod.TypeSection.Types[index]) {
+                if (!mod.typeSection.types[index]) {
                     throw new KWatError('Invalid Import Segment function reference');
                 }
-                desc = mod.TypeSection.Types[index]!;
+                desc = mod.typeSection.types[index]!;
                 break;
             }
             case ExchangeDescriptionCode.global:
@@ -165,12 +165,12 @@ export class ImportSegment implements IEncodable<[Types.FunctionType[]]> {
 /** A section containing all the imported entities the module */
 export class ImportSection extends Section<SectionTypes.import> {
     /** All the imported entity declarations of the section */
-    public readonly Imports!: ImportSegment[];
+    public readonly imports!: ImportSegment[];
 
     /** Create an empty import section */
     public constructor() {
         super(SectionTypes.import);
-        protect(this, 'Imports', [], true);
+        protect(this, 'imports', [], true);
     }
 
     /** Retrieve the index of a declaration imported in this section
@@ -179,26 +179,26 @@ export class ImportSection extends Section<SectionTypes.import> {
      */
     public indexOf(target: ImportDescription): number {
         if (target instanceof Types.FunctionType) {
-            return this.Imports.findIndex(i => i.isFunction() && i.Description.equals(target));
+            return this.imports.findIndex(i => i.isFunction() && i.description.equals(target));
         }
         else if (target instanceof Types.MemoryType) {
-            return this.Imports.findIndex(i => i.isMemory() && i.Description.equals(target));
+            return this.imports.findIndex(i => i.isMemory() && i.description.equals(target));
         }
         else if (target instanceof Types.TableType) {
-            return this.Imports.findIndex(i => i.isTable() && i.Description.equals(target));
+            return this.imports.findIndex(i => i.isTable() && i.description.equals(target));
         }
         else if (target instanceof Types.GlobalType) {
-            return this.Imports.findIndex(i => i.isGlobal() && i.Description.equals(target));
+            return this.imports.findIndex(i => i.isGlobal() && i.description.equals(target));
         }
         return -1;
     }
 
     protected contentEncode(encoder: IEncoder, mod: Module): void {
-        if (!this.Imports.length) { return; }
-        if (this.Imports.filter(i => i.isFunction()).some(i => mod.TypeSection.indexOf(i.Description as Types.FunctionType) < 0 || i.code < 0)) {
+        if (!this.imports.length) { return; }
+        if (this.imports.filter(i => i.isFunction()).some(i => mod.typeSection.indexOf(i.description as Types.FunctionType) < 0 || i.code < 0)) {
             throw new KWatError('Invalid function definition index');
         }
-        encoder.vector(this.Imports, mod.TypeSection.Types);
+        encoder.vector(this.imports, mod.typeSection.types);
     }
 
     /** Add a new import segment to the section, if not present,
@@ -208,26 +208,26 @@ export class ImportSection extends Section<SectionTypes.import> {
      * @returns {boolean} the success of the operation
      */
     public add(segment: ImportSegment, mod?: Module): boolean {
-        if (this.Imports.find(s => s.equals(segment))) {
+        if (this.imports.find(s => s.equals(segment))) {
             return false;
         }
-        this.Imports.push(segment.clone());
+        this.imports.push(segment.clone());
         if (mod) {
             let target = null;
             switch (segment.code) {
-                case ExchangeDescriptionCode.function: target = mod.TypeSection; break
-                case ExchangeDescriptionCode.global: target = mod.GlobalSection; break
+                case ExchangeDescriptionCode.function: target = mod.typeSection; break
+                case ExchangeDescriptionCode.global: target = mod.globalSection; break
                 // case ExchangeDescriptionCode.memory: target = mod.MemorySection; break
                 // case ExchangeDescriptionCode.table: target = mod.TableSection; break
             }
-            target && target.add(segment.Description as any);
+            target && target.add(segment.description as any);
         }
         return true;
     }
 
     public override decode(decoder: IDecoder, mod: Module) {
-        this.Imports.length = 0;
-        this.Imports.push(...decoder.vector(ImportSegment, mod));
+        this.imports.length = 0;
+        this.imports.push(...decoder.vector(ImportSegment, mod));
     }
 
 }

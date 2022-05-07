@@ -34,11 +34,11 @@ type CodeSegmentContext = {
  */
 export class CodeSegment implements IEncodable<[Module, WasmOptions]> {
     /** The signature of the holding function */
-    public Signature: FunctionType;
+    public signature: FunctionType;
     /** The body of the function */
-    public readonly Body!: Expression;
+    public readonly body!: Expression;
     /** The local variables instantiated by the function */
-    public readonly Locals!: ValueType[];
+    public readonly locals!: ValueType[];
 
     /** Create a new function body definition 
      * @param {FunctionType} signature the signature of the holding function
@@ -46,17 +46,17 @@ export class CodeSegment implements IEncodable<[Module, WasmOptions]> {
      * @param {ValueType[]} [locals] local variables instantiated in the function
      */
     public constructor(signature: FunctionType, body: Instruction[] = [], locals: ValueType[] = []) {
-        this.Signature = signature;
-        protect(this, 'Body', new Expression(body), true);
-        protect(this, 'Locals', locals.slice(), true);
+        this.signature = signature;
+        protect(this, 'body', new Expression(body), true);
+        protect(this, 'locals', locals.slice(), true);
     }
 
     public encode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         let e = encoder.spawn();
-        let l = this.Locals.reduce((a, c) => (a[c] = (a[c] || 0) + 1, a), { } as { [key: number]: number });
+        let l = this.locals.reduce((a, c) => (a[c] = (a[c] || 0) + 1, a), { } as { [key: number]: number });
         e.uint32(Object.keys(l).length);
         for (let k in l) { e.uint32(l[k]!).uint8(parseInt(k)); }
-        e.encode(this.Body, mod, opts);
+        e.encode(this.body, mod, opts);
         encoder.uint32(e.size).append(e);
     }
 
@@ -68,7 +68,7 @@ export class CodeSegment implements IEncodable<[Module, WasmOptions]> {
      * @return {CodeSegment} the read code segment
     */
     public static decode(decoder: IDecoder, context: CodeSegmentContext): CodeSegment {
-        if (!context.module.FunctionSection.Functions[context.index]) {
+        if (!context.module.functionSection.functions[context.index]) {
             throw new KWatError('Invalid Code Segment function reference');
         }
         const len = decoder.uint32();
@@ -86,7 +86,7 @@ export class CodeSegment implements IEncodable<[Module, WasmOptions]> {
         let body = decoder.decode(Expression, context.module, context.options);
         if (curr - decoder.remaining !== len) { throw new KWatError('Invalid Code Segment length'); }
         return new CodeSegment(
-            context.module.FunctionSection.Functions[context.index++]!,
+            context.module.functionSection.functions[context.index++]!,
             body.Instructions, locals as any[]
         );
     }
@@ -120,15 +120,15 @@ export class CodeSection extends Section<SectionTypes.code> {
     public add(segment: FunctionType | CodeSegment, body: Instruction[]=[], locals: ValueType[]=[]): boolean {
         if (segment instanceof FunctionType) { segment = new CodeSegment(segment, body, locals); }
         if (!(segment instanceof CodeSegment)) { throw new KWatError('Invalid Code Segment pushed'); }
-        if (this.Codes.some(cs => cs.Signature === (segment as CodeSegment).Signature)) { return false; }
+        if (this.Codes.some(cs => cs.signature === (segment as CodeSegment).signature)) { return false; }
         this.Codes.push(segment);
         return true;
     }
     
     public contentEncode(encoder: IEncoder, mod: Module, opts: WasmOptions): void {
         if (
-            this.Codes.length != mod.FunctionSection.Functions.length ||
-            this.Codes.some((cs, i) => !cs.Signature.equals(mod.FunctionSection.Functions[i]))
+            this.Codes.length != mod.functionSection.functions.length ||
+            this.Codes.some((cs, i) => !cs.signature.equals(mod.functionSection.functions[i]))
         ) { throw new KWatError('Code Section does not correspond to Function Section!'); }
         encoder.vector(this.Codes, mod, opts);
     }

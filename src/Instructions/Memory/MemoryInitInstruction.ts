@@ -36,7 +36,7 @@ export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.op_
         this.Memory = memory || null;
     }
     public getDataIndex(context: ExpressionEncodeContext, pass?: boolean): number {
-        let index = context.module.DataSection.Datas.indexOf(this.Data);
+        let index = context.module.dataSection.segments.indexOf(this.Data);
         if (!pass && index < 0) { throw new KWatError('Memory Init Instruction invalid data reference'); }
         return index;
     }
@@ -45,8 +45,8 @@ export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.op_
         let index = this.getDataIndex(context);
         let mem = 0;
         if (this.Memory) {
-            mem = context.module.MemorySection.indexOf(this.Memory);
-            if (mem === -1) { mem = context.module.ImportSection.indexOf(this.Memory)}
+            mem = context.module.memorySection.indexOf(this.Memory);
+            if (mem === -1) { mem = context.module.importSection.indexOf(this.Memory)}
             if (mem === -1) { throw new KWatError('Memory index not found: ' + this.Memory); }
         }
         if (mem && !context.options.multipleMemory) { throw new UnsupportedExtensionError('multiple memory'); }
@@ -58,10 +58,10 @@ export class MemoryInitInstruction extends AbstractMemoryInstruction<OpCodes.op_
 
     public static override decode(decoder: IDecoder, context: ExpressionEncodeContext): MemoryInitInstruction {
         let index = decoder.uint32();
-        if (!context.module.DataSection.Datas[index]) { throw new KWatError('Memory Init Instruction invalid data reference'); }
+        if (!context.module.dataSection.segments[index]) { throw new KWatError('Memory Init Instruction invalid data reference'); }
         let b;
         if ((b = decoder.uint8()) !== 0x00) { throw new KWatError('Memory Init Instruction unexpected closing byte: 0x' + Number(b).toString(16)); }
-        return new MemoryInitInstruction(context.module.DataSection.Datas[index]!)
+        return new MemoryInitInstruction(context.module.dataSection.segments[index]!)
     }
 }
 MemoryInitInstruction.registerInstruction(OpCodes.op_extension_1, OpCodesExt1.memory_init);
