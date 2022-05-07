@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ddomen/kWAT.git"
+    "url": "git+https://github.com/ddomen/kwat.git"
   },
   "keywords": [
     "WebAssembly", "wasm", "wat",
@@ -19,10 +19,10 @@
   "author": "Daniele Domenichelli <daniele.domenichelli.5+npm@gmail.com>",
   "license": "GPL-3.0-or-later",
   "bugs": {
-    "url": "https://github.com/ddomen/kWAT/issues",
+    "url": "https://github.com/ddomen/kwat/issues",
     "email": "daniele.domenichelli.5+npm@gmail.com"
   },
-  "homepage": "https://github.com/ddomen/kWAT#readme",
+  "homepage": "https://github.com/ddomen/kwat#readme",
   "devDependencies": {
     "@types/jasmine": "^3.9.1",
     "@types/node": "^16.10.3",
