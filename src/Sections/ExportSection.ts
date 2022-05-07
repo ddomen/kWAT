@@ -23,7 +23,7 @@ import type { Module } from '../Module';
 import type { IEncoder, IDecoder, IEncodable } from '../Encoding';
 
 /** Exchange type descriptor for {@link ExportDescription} */
-type ExchangeNarrower<R extends ExportDescription> = { Description: R };
+type ExchangeNarrower<R extends ExportDescription> = { description: R };
 
 /** All possible types which are exchangeable in export operations */
 export type ExportDescription = Types.FunctionType | Types.TableType | Types.MemoryType | Types.GlobalType;

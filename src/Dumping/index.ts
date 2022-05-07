@@ -17,3 +17,4 @@
 
 export * from './dump'
 export * from './Reader'
+export * from './ExpressionReader'

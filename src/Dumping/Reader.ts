@@ -18,21 +18,24 @@
 import { Type } from '../Types';
 import { protect } from '../internal';
 import { KWatError } from '../errors';
-import { ExchangeDescriptionCode, SectionTypes } from '../Sections';
 import { Decoder, IDecoder } from '../Encoding';
-import { OpCodes, OpCodesExt1, OpCodesExt2 } from '../OpCodes';
-import { Instruction as IX } from '../Instructions';
+import { Expression, ExpressionReader, ExpressionReaderEvent } from './ExpressionReader';
+import { ExchangeDescriptionCode, SectionTypes } from '../Sections';
 
-export type ReaderEvent<K extends keyof ReaderEventMap = keyof ReaderEventMap, V = any> = {
+export type GenericReaderEvent = {
     id: string,
     index: number,
     data: Uint8Array,
-    value: V,
-    type: K,
     composite: boolean,
     textualValue: string | null,
-    description: string
+    description: string,
+    type: string,
+    value: any
 }
+export type ReaderEvent<K extends keyof ReaderEventMap = keyof ReaderEventMap, V = any> = {
+    value: V,
+    type: K
+} & GenericReaderEvent;
 
 export type Section = {
     type: SectionTypes,
@@ -72,15 +75,6 @@ export type Memory = {
     max: number | null
 }
 export type ExchangeableType = number | Memory | Table | GlobalVar;
-
-export type Instruction<C extends OpCodes = OpCodes> = {
-    code: C,
-    extCode: C extends OpCodes.op_extension_1 ? OpCodesExt1 :
-             C extends OpCodes.op_extension_2 ? OpCodesExt2 :
-             null,
-    value: any
-}
-export type Expression = Instruction[];
 
 export type Data = {
     active: boolean,
@@ -193,7 +187,7 @@ export type ReaderEventMap = {
     'section.elements.element.type': ReaderEvent<'section.elements.element.type', Type>,
     'section.elements.element.inits': ReaderEvent<'section.elements.element.inits', Expression[]>,
     'section.elements.element.inits.size': ReaderEvent<'section.elements.element.inits.size', number>,
-    'section.elements.element.inits.init': ReaderEvent<'section.elements.element.inits.init', Expression>,
+    'section.elements.element.inits.init': ReaderEvent<'section.elements.element.inits.init', Expression | number>,
     
     'section.globals': ReaderEvent<'section.globals', GlobalVarDecl[]>,
     'section.globals.size': ReaderEvent<'section.globals.size', number>,
@@ -237,9 +231,8 @@ function sectionTypeToPlural(type: SectionTypes | string): string {
     return s;
 }
 
-const opDescriptions: Record<OpCodes | OpCodesExt1 | OpCodesExt2, string> = {} as any;
-
 export class Reader {
+    private readonly _startOffset!: number;
     private readonly _handlers!: { [K in keyof ReaderEventMap]: ReaderEventCallback<ReaderEventMap[K]>[] };
     private readonly _decoder!: IDecoder;
 
@@ -250,8 +243,10 @@ export class Reader {
              ArrayBuffer.isView(buffer) ? new Decoder(buffer.buffer) :
              buffer
         );
+        protect(this as any as { _startOffset: number }, '_startOffset', this._decoder.offset);
     }
 
+    private _u_emit(type: string, event: any): this { return this._emit(type as any, event); }
     private _emit<K extends keyof ReaderEventMap>(type: K, event: ReaderEventMap[K]): this {
         if (type in this._handlers) { this._handlers[type].forEach(cb => (cb as any).call(this, event)); }
         if (type !== 'all' && type !== 'error') { this._emit('all', event as ReaderEvent<any>); }
@@ -284,7 +279,6 @@ export class Reader {
                              null;
         description = ((typeof(description) === 'function' ? description(value) : description) || '') + '';
         id = (typeof(id) === 'function' ? id(value) : id) + '';
-        !id.startsWith('#') && (id = '#' + id);
         this._emit(type, { data, index, value, type, composite, textualValue, description, id } as any);
         return value;
     }
@@ -294,7 +288,7 @@ export class Reader {
             const magic = this._decoder.utf8(4);
             if (magic !== '\0asm') { throw new KWatError('Invalid wasm binary magic: ' + magic); } 
             return magic;
-        }, '#magic', 'The encoding of a module starts with a preamble containing a 4-byte magic number (the string \'\\0asm\')', '\\0asm');
+        }, 'magic', 'The encoding of a module starts with a preamble containing a 4-byte magic number (the string \'\\0asm\')', '\\0asm');
     }
 
     private _parseVersion(): string {
@@ -304,9 +298,29 @@ export class Reader {
                 this._decoder.uint8(),
                 this._decoder.uint8()
             ].join('.'),
-            '#version',
+            'version',
             'The encoding of a module starts with a preamble with a version field (little endian). The current version of the WebAssembly binary format is 1.0.0.0'
         );
+    }
+
+    private _emitExpression(
+        parent: string,
+        parentId: string,
+        expression: ExpressionReaderEvent,
+        desc?: string
+    ) {
+        this._u_emit(parent + '.' + expression.type, {
+            id: parentId + '.' + expression.id,
+            index: expression.index,
+            data: expression.data,
+            value: expression.value,
+            type: parent + '.' + expression.type,
+            composite: expression.composite,
+            textualValue: expression.textualValue,
+            description: expression.type === 'expression' && desc ?
+                            desc : expression.description
+        })
+        return expression;
     }
 
     private _parseExpression(
@@ -314,64 +328,13 @@ export class Reader {
         parentId: string,
         desc: string
     ): Expression {
-        return this._u_autoEmit(
-            parent + '.expression',
-            () => {
-                let arr: Expression = [];
-                let j = 0;
-                while (this._decoder.peek() !== OpCodes.end) {
-                    const index = j++;
-                    arr.push(this._u_autoEmit(
-                        parent + '.expression.instruction',
-                        () => {
-                            const code = this._u_autoEmit(
-                                parent + '.expression.instruction.code',
-                                () => this._decoder.uint8(),
-                                parentId + '.expression.instructions[' + index + ']',
-                                'Code of the instruction', OpCodes
-                            ) as OpCodes;
-                            const i: Instruction = { code, extCode: null, value: null };
-                            if (
-                                code === OpCodes.op_extension_1 ||
-                                code === OpCodes.op_extension_2
-                            ) {
-                                i.extCode = this._u_autoEmit(
-                                    parent + '.expression.instruction.extCode',
-                                    () => this._decoder.uint8(),
-                                    parentId + '.expression.instructions[' + index + '].ext',
-                                    'Extension code of the instruction', OpCodes
-                                ) as OpCodesExt1;
-                            }
-                            const a = i.extCode !== null ? i.extCode : i.code; 
-                            const c = IX.resolveInstruction(a);
-                            return { i, a, c };
-                        },
-                        parentId + '.expression.instructions[' + index + ']',
-                        v => opDescriptions[v.a] || 'Unknown Instruction',
-                        v => v.c ? 'instance' in v.c ? v.c.instance.constructor.name : (v.c as any).name : '???',
-                        true
-                    ).i);
-                }
-                ++j;
-                arr.push(this._u_autoEmit(
-                    parent + '.expression.instruction',
-                    () => ({
-                        code: this._u_autoEmit(
-                            parent + '.expression.instruction.code',
-                            () => this._decoder.uint8(),
-                            parentId + '.expression.instructions[' + j + ']',
-                            'Code of the instruction', OpCodes
-                        ),
-                        extCode: null, value: null
-                    }),
-                    parentId + '.expression.instructions[' + j + ']',
-                    opDescriptions[OpCodes.end] || 'Unknown Instruction',
-                    null, true
-                ));
-                return arr;
-            },
-            parentId + '.expression', desc, null, true
-        ) as Expression;
+        const exp = new ExpressionReader(this._decoder);
+        let res: Expression;
+        exp.on('all', e => this._emitExpression(parent, parentId, e, desc));
+        exp.on('expression', e => res = e.value);
+        exp.on('error', e => this._emit('error', e));
+        exp.read();
+        return res!;
     }
 
     private _parseTypeFunc(index: number): SectionTypeFunction {
@@ -379,7 +342,7 @@ export class Reader {
                 const nParams = this._autoEmit(
                     'section.types.function.params',
                     () => this._decoder.uint32(),
-                    '#sections.types[' + index + ']<func>.params.length',
+                    'sections.types[' + index + ']<func>.params.length',
                     'The number of the parameters of the function'
                 );
                 const params: Type[] = [];
@@ -387,7 +350,7 @@ export class Reader {
                     params.push(this._autoEmit(
                         'section.types.function.param',
                         () => this._decoder.uint8(),
-                        '#sections.types[' + index + ']<func>.params[' + p +']',
+                        'sections.types[' + index + ']<func>.params[' + p +']',
                         'The type of the current parameter',
                         Type
                     ));
@@ -395,22 +358,22 @@ export class Reader {
                 const nResults = this._autoEmit(
                     'section.types.function.results',
                     () => this._decoder.uint32(),
-                    '#sections.types[' + index + ']<func>.results.length',
-                    'The number of the results of the current function (#types[' + index + '])'
+                    'sections.types[' + index + ']<func>.results.length',
+                    'The number of the results of the current function (types[' + index + '])'
                 );
                 const results: Type[] = [];
                 for (let r = 0; r < nResults; ++r) {
                     results.push(this._autoEmit(
                         'section.types.function.result',
                         () => this._decoder.uint8(),
-                        '#sections.types[' + index + ']<func>.results[' + r +']',
+                        'sections.types[' + index + ']<func>.results[' + r +']',
                         'The type of the current result',
                         Type
                     ));
                 }
                 return { params, results, index };
             },
-            '#sections.types[' + index + ']<func>',
+            'sections.types[' + index + ']<func>',
             'A declared function type, a signature of one or more declared functions in the module',
             null, true
         );
@@ -420,7 +383,7 @@ export class Reader {
                 index,
                 data: this._decoder.read(this._decoder.remaining)
             }),
-            '#sections.types[' + index + ']<unk>',
+            'sections.types[' + index + ']<unk>',
             'An unexpected type declaration #types[' + index + ']'
         );
     }
@@ -429,7 +392,7 @@ export class Reader {
                 const code = this._autoEmit(
                     'section.types.code',
                     () => this._decoder.uint8(),
-                    '#sections.types[' + index + '].type',
+                    'sections.types[' + index + '].type',
                     'The kind of the current declared type',
                     Type
                 );
@@ -438,7 +401,7 @@ export class Reader {
                     default: return this._parseTypeUnknown(index);
                 }
             },
-            '#sections.types[' + index + ']',
+            'sections.types[' + index + ']',
             'The declared type, actually can be just a function type',
             null, true
         );
@@ -448,14 +411,14 @@ export class Reader {
             const nTypes = this._autoEmit(
                 'section.types.size',
                 () => this._decoder.uint32(),
-                '#sections.types.length',
+                'sections.types.length',
                 'The number of declared types in this module'
             );
             const types: SectionTypeTypes[] = [];
             for (let i = 0; i < nTypes; ++i) { types.push(this._parseType(i)); }
             return types;
         },
-        '#sections.types',
+        'sections.types',
         'The type section which includes the signature definitions of declared functions in the module',
         null, true
         );
@@ -466,31 +429,31 @@ export class Reader {
                 const modLen = this._autoEmit(
                     'section.imports.import.module.size',
                     () => this._decoder.uint32(),
-                    '#sections.imports[' + index + '].module.length',
+                    'sections.imports[' + index + '].module.length',
                     'The length of the imported module name string'
                 );
                 const module = this._autoEmit(
                     'section.imports.import.module',
                     () => this._decoder.string(modLen),
-                    '#sections.imports[' + index + '].module',
+                    'sections.imports[' + index + '].module',
                     'The imported module name #imports'
                 );
                 const namLen = this._autoEmit(
                     'section.imports.import.name.size',
                     () => this._decoder.uint32(),
-                    '#sections.imports[' + index + '].name.length',
+                    'sections.imports[' + index + '].name.length',
                     'The length of the imported entity name string'
                 );
                 const name = this._autoEmit(
                     'section.imports.import.name',
                     () => this._decoder.string(namLen),
-                    '#sections.imports[' + index + '].name',
+                    'sections.imports[' + index + '].name',
                     'The imported entity name'
                 );
                 const kind = this._autoEmit(
                     'section.imports.import.code',
                     () => this._decoder.uint8(),
-                    '#sections.imports[' + index + '].kind',
+                    'sections.imports[' + index + '].kind',
                     'The imported entity exchange kind',
                     ExchangeDescriptionCode
                 );
@@ -502,7 +465,7 @@ export class Reader {
                                 return this._autoEmit(
                                     'section.imports.import.declaration',
                                     () => this._decoder.uint32(),
-                                    '#sections.imports[' + index + '].declaration<func>',
+                                    'sections.imports[' + index + '].declaration<func>',
                                     i => 'The signature index referencing the type section (#sections.types[' + i + '])'
                                 );
                             case ExchangeDescriptionCode.table:
@@ -510,33 +473,33 @@ export class Reader {
                                     const type = this._autoEmit(
                                         'section.imports.import.declaration.table.type',
                                         () => this._decoder.uint8(),
-                                        '#sections.imports[' + index + '].declaration<table>.type',
+                                        'sections.imports[' + index + '].declaration<table>.type',
                                         'The element type of the table',
                                         Type
                                     );
                                     const hasMax = this._autoEmit(
                                         'section.imports.import.declaration.table.hasMax',
                                         () => !!this._decoder.uint8(),
-                                        '#sections.imports[' + index + '].declaration<table>.hasMax',
+                                        'sections.imports[' + index + '].declaration<table>.hasMax',
                                         'Wheter the maximum capacity of the table is set or not'
                                     );
                                     const min = this._autoEmit(
                                         'section.imports.import.declaration.table.min',
                                         () => this._decoder.uint32(),
-                                        '#sections.imports[' + index + '].declaration<table>.min',
+                                        'sections.imports[' + index + '].declaration<table>.min',
                                         'The minimum memory size required by the table (expressed in pages)'
                                     )
                                     
                                     const max = hasMax ? this._autoEmit(
                                         'section.imports.import.declaration.table.max',
                                         () => this._decoder.uint32(),
-                                        '#sections.imports[' + index + '].declaration<table>.max',
+                                        'sections.imports[' + index + '].declaration<table>.max',
                                         'The maximum memory size availiable for the table (expressed in pages)'
                                     ) : null;
                                     
                                     return { type, min, max };
                                 },
-                                '#sections.imports[' + index + '].declaration<table>',
+                                'sections.imports[' + index + '].declaration<table>',
                                 'An imported table',
                                 null, true
                             );
@@ -547,25 +510,25 @@ export class Reader {
                                         const hasMax = this._autoEmit(
                                             'section.imports.import.declaration.memory.hasMax',
                                             () => !!this._decoder.uint8(),
-                                            '#sections.imports[' + index + '].declaration<memory>.hasMax',
+                                            'sections.imports[' + index + '].declaration<memory>.hasMax',
                                             'Wheter the maximum capacity of the memory slot is set or not'
                                         );
                                         const min = this._autoEmit(
                                             'section.imports.import.declaration.memory.min',
                                             () => this._decoder.uint32(),
-                                            '#sections.imports[' + index + '].declaration<memory>.min',
+                                            'sections.imports[' + index + '].declaration<memory>.min',
                                             'The minimum memory size required by the memory slot (expressed in pages)'
                                         )
                                         
                                         const max = hasMax ? this._autoEmit(
                                             'section.imports.import.declaration.memory.max',
                                             () => this._decoder.uint32(),
-                                            '#sections.imports[' + index + '].declaration<memory>.max',
+                                            'sections.imports[' + index + '].declaration<memory>.max',
                                             'The maximum memory size availiable for the memory slot (expressed in pages)'
                                         ) : null;
                                         return { min, max };
                                     },
-                                    '#sections.imports[' + index + '].declaration<memory>',
+                                    'sections.imports[' + index + '].declaration<memory>',
                                     'An imported memory slot', null, true
                                 );
                             case ExchangeDescriptionCode.global:
@@ -575,30 +538,30 @@ export class Reader {
                                         const type = this._autoEmit(
                                             'section.imports.import.declaration.global.type',
                                             () => this._decoder.uint8(),
-                                            '#sections.imports[' + index + '].declaration<global>.type',
+                                            'sections.imports[' + index + '].declaration<global>.type',
                                             'The type of the global variable', Type
                                         )
                                         const mutable = this._autoEmit(
                                             'section.imports.import.declaration.global.mutable',
                                             () => !!this._decoder.uint8(),
-                                            '#sections.imports[' + index + '].declaration<global>.mutable',
+                                            'sections.imports[' + index + '].declaration<global>.mutable',
                                             'Whether the global variable is mutable or not'
                                         );
                                         return { type, mutable }
                                     },
-                                    '#sections.imports[' + index + '].declaration<global>',
+                                    'sections.imports[' + index + '].declaration<global>',
                                 
                                     'An imported global variable',
                                     null, true
                                 )
                         }
                     },
-                    '#sections.imports[' + index + '].declaration',
+                    'sections.imports[' + index + '].declaration',
                     'An import declaration', null, true
                 )
                 return { module, name, kind, index, declaration };
             },
-            '#sections.imports[' + index + ']',
+            'sections.imports[' + index + ']',
             'An import statement including the module reference name, the element name and its declaration, which can be a function, a memory, a table or a global variable',
             null, true
         );
@@ -608,14 +571,14 @@ export class Reader {
                 const nImports = this._autoEmit(
                     'section.imports.size',
                     () => this._decoder.uint32(),
-                    '#sections.imports.length',
+                    'sections.imports.length',
                     'The number of imported entities'
                 );
                 const imports: SectionImport[] = [];
                 for (let i = 0; i < nImports; ++i) { imports.push(this._parseImport(i)); }
                 return imports;
             },
-            '#sections.imports',
+            'sections.imports',
             'The import section, includes the module, the name and the declaration of the imported elements in the current module',
             null, true
         );
@@ -623,22 +586,22 @@ export class Reader {
 
     protected _parseSection_function(): number[] {
         return this._autoEmit('section.functions', () => {
-            const nFuncs = this._autoEmit('section.functions.size', () => this._decoder.uint32(), '#sections.functions.length', 'The number of functions declared in this module');
+            const nFuncs = this._autoEmit('section.functions.size', () => this._decoder.uint32(), 'sections.functions.length', 'The number of functions declared in this module');
             const functions: number[] = [];
             for (let i = 0; i < nFuncs; ++i) {
                 functions.push(this._autoEmit(
                     'section.functions.function',
                     () => this._decoder.uint32(),
-                    '#sections.functions[' + i + ']',
+                    'sections.functions[' + i + ']',
                     i => 'The signature index referencing the type section (#sections.types[' + i + '])'
                 ));
             }
             return functions;
-        }, '#sections.functions', null, null, true);
+        }, 'sections.functions', null, null, true);
     }
 
     private _parseExport(index: number): SectionExport {
-        const sid = '#sections.exports[' + index + ']';
+        const sid = 'sections.exports[' + index + ']';
         return this._autoEmit('section.exports.export', () => {
             const namLen = this._autoEmit(
                 'section.exports.export.name.size',
@@ -662,7 +625,7 @@ export class Reader {
             const reference = this._autoEmit(
                 'section.exports.export.reference',
                 () => this._decoder.uint32(),
-                '#sections.exports[' + index + ']',
+                'sections.exports[' + index + ']',
                 v => 'The index of the exported element in the corrispective section (#sections.' +
                         sectionTypeToPlural(ExchangeDescriptionCode[kind] + '') + '[' + v + '])'
             );
@@ -673,15 +636,15 @@ export class Reader {
     }
     protected _parseSection_export(): SectionExport[] {
         return this._autoEmit('section.exports', () => {
-            const nExports = this._autoEmit('section.exports.size', () => this._decoder.uint32(), '#sections.exports.length');
+            const nExports = this._autoEmit('section.exports.size', () => this._decoder.uint32(), 'sections.exports.length');
             const exports: SectionExport[] = [];
             for (let i = 0; i < nExports; ++i) { exports.push(this._parseExport(i)); }
             return exports;
-        }, '#sections.exports', null, null, true);
+        }, 'sections.exports', null, null, true);
     }
 
     private _parseFunctionBody(index: number): SectionBody {
-        const sid = '#sections.codes[' + index + ']';
+        const sid = 'sections.codes[' + index + ']';
         const ref = ' (#sections.functions[' + index + '])';
         return this._autoEmit('section.codes.function', () => {
             const size = this._autoEmit(
@@ -734,7 +697,7 @@ export class Reader {
                 const nBodies = this._autoEmit(
                     'section.codes.size',
                     () => this._decoder.uint32(),
-                    '#sections.codes.length',
+                    'sections.codes.length',
                     'The number of defined bodies in the module (must correspond to the same number of declared functions)'
                 );
                 const bodies: SectionBody[] = [];
@@ -743,7 +706,7 @@ export class Reader {
                 }
                 return bodies;
             },
-            '#sections.codes',
+            'sections.codes',
             'The section which contains all the declared function bodies',
             null, true
         );
@@ -756,7 +719,7 @@ export class Reader {
                 const nMems = this._autoEmit(
                     'section.memories.size',
                     () => this._decoder.uint32(),
-                    '#sections.memories.length',
+                    'sections.memories.length',
                     'The number of defined memories (Note: Wasm v1 introduces only 1 memory without extensions)'
                 );
                 const res: Memory[] = [];
@@ -767,39 +730,39 @@ export class Reader {
                             const hasMax = this._autoEmit(
                                 'section.memories.memory.hasMax',
                                 () => !!this._decoder.uint8(),
-                                '#sections.memories[' + i + '].hasMax',
+                                'sections.memories[' + i + '].hasMax',
                                 'Wheter the maximum capacity of the memory slot is set or not'
                             );
                             const min = this._autoEmit(
                                 'section.memories.memory.min',
                                 () => this._decoder.uint32(),
-                                '#sections.memories[' + i + '].min',
+                                'sections.memories[' + i + '].min',
                                 'The minimum memory size required by the memory slot (expressed in pages)'
                             )
                             
                             const max = hasMax ? this._autoEmit(
                                 'section.memories.memory.max',
                                 () => this._decoder.uint32(),
-                                '#sections.memories[' + i + '].max',
+                                'sections.memories[' + i + '].max',
                                 'The maximum memory size availiable for the memory slot (expressed in pages)'
                             ) : null;
                             return { min, max }
                         },
-                        '#sections.memories[' + i + ']',
+                        'sections.memories[' + i + ']',
                         'A memory declaration',
                         null, true
                     ));
                 }
                 return res;
             },
-            '#sections.memories',
+            'sections.memories',
             'The section where all the memories are declared (exluding imported memories)',
             null, true
         )
     }
 
     private _parseData(index: number): Data {
-        const sid = '#sections.datas[' + index + ']';
+        const sid = 'sections.datas[' + index + ']';
         let v: number = -1;
         const res: Data = { memory: null, offset: null } as any;
         res.active = this._autoEmit(
@@ -853,7 +816,7 @@ export class Reader {
                 const nData = this._autoEmit(
                     'section.datas.size',
                     () => this._decoder.uint32(),
-                    '#sections.datas.length',
+                    'sections.datas.length',
                     'The number of data segments defined in the current module'
                 );
                 const datas: Data[] = [];
@@ -861,14 +824,14 @@ export class Reader {
                     datas.push(this._autoEmit(
                         'section.datas.data',
                         () => this._parseData(i),
-                        '#sections.datas[' + i + ']',
+                        'sections.datas[' + i + ']',
                         'A data segment definition',
                         null, true
                     ))
                 }
                 return datas;
             },
-            '#sections.datas',
+            'sections.datas',
             'The section which contains all the data used to initialize the memories',
             null, true
         )
@@ -878,7 +841,7 @@ export class Reader {
         return this._autoEmit(
             'section.datacount',
             () => this._decoder.uint32(),
-            '#sections.datas.length',
+            'sections.datas.length',
             'The number of declared segments in the data section of the module'
         )
     } 
@@ -887,13 +850,13 @@ export class Reader {
         return this._autoEmit(
             'section.start',
             () => this._decoder.uint32(),
-            '#sections.start',
+            'sections.start',
             v => 'References the function to execute when the module is instantiated (#sections.functions[' + v + '])'
         );
     }
 
     private _parseElement(index: number): Element {
-        const sid = '#sections.elements[' + index + ']';
+        const sid = 'sections.elements[' + index + ']';
         return this._autoEmit(
             'section.elements.element',
             () => {
@@ -988,7 +951,7 @@ export class Reader {
                                     ),
                                     sid + '.init[' + i + ']<exp>',
                                     'The expression used to initialize the subsequent data in the table'
-                                ))
+                                ) as Expression)
                             }
                             return init;
                         },
@@ -1009,17 +972,15 @@ export class Reader {
                             )
                             const init: Expression[] = [];
                             for (let i = 0; i < size; ++i) {
+                                const exp = new ExpressionReader(this._decoder, true);
+                                exp.on('expression', e => init.push(e.value));
+                                exp.on('error', e => this._emit('error', e));
                                 init.push(this._autoEmit(
                                     'section.elements.element.inits.init',
-                                    () => [{
-                                        code: OpCodes.ref_func,
-                                        value: this._decoder.uint32(),
-                                        extCode: null
-                                    }],
+                                    () => this._decoder.uint32(),
                                     sid + '.init[' + i + ']<func>',
-                                    v => 'The function index called to initialize the subsequent data in the table ' +
-                                    '(#sections.functions[' + v[0]!.value + '])'
-                                ));
+                                    v => 'The function index called to initialize the subsequent data in the table (#sections.functions[' + v + '])'
+                                ) as Expression);
                             }
                             return init;
                         },
@@ -1044,7 +1005,7 @@ export class Reader {
                 const nElem = this._autoEmit(
                     'section.elements.size',
                     () => this._decoder.uint32(),
-                    '#sections.elements.length',
+                    'sections.elements.length',
                     'The number of element segments declared in the module'
                 );
                 const elems: any[] = [];
@@ -1053,14 +1014,14 @@ export class Reader {
                 }
                 return elems;
             },
-            '#sections.elements',
+            'sections.elements',
             'The element section contains the data used to initialize a specific table',
             null, true
         )
     }
 
     private _parseGlobal(index: number): GlobalVarDecl {
-        const sid = '#sections.globals[' + index + ']';
+        const sid = 'sections.globals[' + index + ']';
         return this._autoEmit(
             'section.globals.global',
             () => {
@@ -1102,7 +1063,7 @@ export class Reader {
                 const nGlobs = this._autoEmit(
                     'section.globals.size',
                     () => this._decoder.uint32(),
-                    '#sections.globals.length',
+                    'sections.globals.length',
                     'The number of global variables declared in the module'
                 );
                 const globs: GlobalVarDecl[] = [];
@@ -1111,7 +1072,7 @@ export class Reader {
                 }
                 return globs;
             },
-            '#sections.globals',
+            'sections.globals',
             'The section which holds all the global variable declarations of the module',
             null, true
         )
@@ -1124,7 +1085,7 @@ export class Reader {
                 const nTabs = this._autoEmit(
                     'section.tables.size',
                     () => this._decoder.uint32(),
-                    '#sections.tables.length',
+                    'sections.tables.length',
                     'The number of tables declared in the module'
                 );
                 const tabs: Table[] = [];
@@ -1135,39 +1096,39 @@ export class Reader {
                             const type = this._autoEmit(
                                 'section.tables.table.type',
                                 () => this._decoder.uint8(),
-                                '#sections.imports[' + i + '].declaration<table>.type',
+                                'sections.imports[' + i + '].declaration<table>.type',
                                 'The element type of the table',
                                 Type
                             );
                             const hasMax = this._autoEmit(
                                 'section.tables.table.hasMax',
                                 () => !!this._decoder.uint8(),
-                                '#sections.imports[' + i + '].declaration<table>.hasMax',
+                                'sections.imports[' + i + '].declaration<table>.hasMax',
                                 'Wheter the maximum capacity of the table is set or not'
                             );
                             const min = this._autoEmit(
                                 'section.tables.table.min',
                                 () => this._decoder.uint32(),
-                                '#sections.imports[' + i + '].declaration<table>.min',
+                                'sections.imports[' + i + '].declaration<table>.min',
                                 'The minimum memory size required by the table (expressed in pages)'
                             )
                             
                             const max = hasMax ? this._autoEmit(
                                 'section.tables.table.max',
                                 () => this._decoder.uint32(),
-                                '#sections.imports[' + i + '].declaration<table>.max',
+                                'sections.imports[' + i + '].declaration<table>.max',
                                 'The maximum memory size availiable for the table (expressed in pages)'
                             ) : null;
                             
                             return { type, min, max };
                         },
-                        '#sections.tables[' + i + ']',
+                        'sections.tables[' + i + ']',
                         'The table definition', null, true
                     ));
                 }
                 return tabs;
             },
-            '#sections.tables',
+            'sections.tables',
             'The section which holds all the table declarations of the module',
             null, true
         )
@@ -1227,7 +1188,7 @@ export class Reader {
         const res: any = subTypes.reduce((o, k) => (o[k] = null, o), {} as any);
 
         while (size > 0) {
-            const sid = '#sections.customs.names[' + i + ']';
+            const sid = 'sections.customs.names[' + i + ']';
             this._u_autoEmit(
                 'section.custom.names',
                 () => {
@@ -1243,21 +1204,21 @@ export class Reader {
                                 this._u_autoEmit(
                                     'section.custom.names.module.size',
                                     () => this._decoder.uint32(),
-                                    '#sections.customs.names.module.size'
+                                    'sections.customs.names.module.size'
                                 )
                                 const nLen = this._u_autoEmit(
                                     'section.custom.names.module.name.size',
                                     () => this._decoder.uint32(),
-                                    '#sections.customs.names.module.name.length'
+                                    'sections.customs.names.module.name.length'
                                 )
                                 const name = this._u_autoEmit(
                                     'section.custom.names.module.name',
                                     () => this._decoder.string(nLen),
-                                    '#sections.customs.names.module.name'
+                                    'sections.customs.names.module.name'
                                 )
                                 return name;
                             },
-                            '#sections.customs.names.module', null, null, true
+                            'sections.customs.names.module', null, null, true
                         );
                     }
                     else if (sub === 'local') {
@@ -1267,12 +1228,12 @@ export class Reader {
                                 this._u_autoEmit(
                                     'section.custom.name.locals.size',
                                     () => this._decoder.uint32(),
-                                    '#sections.customs.names.locals.byteLength'
+                                    'sections.customs.names.locals.byteLength'
                                 );
                                 const nMaps = this._u_autoEmit(
                                     'section.custom.name.locals.count',
                                     () => this._decoder.uint32(),
-                                    '#sections.customs.names.locals.length'
+                                    'sections.customs.names.locals.length'
                                 );
                                 const funMap: Record<number, Record<number, string>> = {};
                                 for (let i = 0; i < nMaps; ++i) {
@@ -1282,23 +1243,23 @@ export class Reader {
                                             const fId = this._u_autoEmit(
                                                 'section.custom.name.locals.local.reference',
                                                 () => this._decoder.uint32(),
-                                                v => '#sections.customes.names.locals[' + v + ']'
+                                                v => 'sections.customes.names.locals[' + v + ']'
                                             );
                                             const locMap = this._parseNameMap(
                                                 'section.custom.name.locals.local',
-                                                '#sections.customs.names.locals.local',
+                                                'sections.customs.names.locals.local',
                                                 'name'
                                             );
                                             return { id: fId, map: locMap }
                                         },
-                                        l => '#sections.customs.names.locals[' + l.id + ']',
+                                        l => 'sections.customs.names.locals[' + l.id + ']',
                                         null, null, true
                                     )
                                     funMap[fn.id] = fn.map;
                                 }
                                 return funMap;
                             },
-                            '#sections.customs.names.locals',
+                            'sections.customs.names.locals',
                             null, null, true
                         );
                     }
@@ -1307,21 +1268,21 @@ export class Reader {
                         this._u_autoEmit(
                             'section.custom.names.' + p + '.size',
                             () => this._decoder.uint32(),
-                            '#sections.customs.names.' + p + '.byteLength'
+                            'sections.customs.names.' + p + '.byteLength'
                         );
                         return res[sub] = this._parseNameMap(
                             'section.custom.names.' + p,
-                            '#sections.customs.names.' + p,
+                            'sections.customs.names.' + p,
                             sub
                         );
                     }
                     return res.unknown = this._u_autoEmit(
                         'section.custom.names.unknown',
                         () => this._decoder.read(size),
-                        '#sections.customs.names.unknwon'
+                        'sections.customs.names.unknwon'
                     );
                 },
-                '#sections.customs.names',
+                'sections.customs.names',
                 null, null, true
             )
             size -= this._decoder.offset - o;
@@ -1340,12 +1301,12 @@ export class Reader {
             this._autoEmit(
                 'section.custom.name.size',
                 () => this._decoder.uint32(),
-                '#sections.customs.' + name + '.name.length'
+                'sections.customs.' + name + '.name.length'
             );
              this._autoEmit(
                 'section.custom.name',
                 () => this._decoder.string(namLen),
-                '#sections.customs.' + name + '.name'
+                'sections.customs.' + name + '.name'
             );
             const method = '_parseSectionCustom_' + (name || '').toLowerCase();
             const result: SectionCustom = { name, data: null };
@@ -1357,19 +1318,19 @@ export class Reader {
                 result.data = this._autoEmit(
                     'section.custom.unknown',
                     () => this._decoder.read(diffSize),
-                    '#sections.customs.' + name + '.unknown',
+                    'sections.customs.' + name + '.unknown',
                     'An unrecognized custom section'
                 );
             }
             return result;
-        }, s => '#section.custom.' + s.name, null, null, true);
+        }, s => 'section.custom.' + s.name, null, null, true);
     }
 
     private _parseSectionUnknown(size: number): Uint8Array {
         return this._autoEmit(
             'section.unknown',
             () => this._decoder.read(size),
-            '#sections.unknown',
+            'sections.unknown',
             'A not identified section'
         );
     }
@@ -1379,11 +1340,11 @@ export class Reader {
             const code = this._autoEmit(
                 'section.code',
                 () => this._decoder.uint8(),
-                k => '#sections.' + sectionTypeToPlural(k),
+                k => 'sections.' + sectionTypeToPlural(k),
                 'The section kind',
                 SectionTypes
             );
-            const sid = '#sections.' + sectionTypeToPlural(code);
+            const sid = 'sections.' + sectionTypeToPlural(code);
             const size = this._autoEmit('section.size', () => this._decoder.uint32(), sid + '.size', 'The current section size in bytes (size excluded)');
             const start = this._decoder.offset;
             const data = ((this as any)['_parseSection_' + SectionTypes[code]] || this._parseSectionUnknown).call(this, size);
@@ -1403,12 +1364,12 @@ export class Reader {
                 );
             }
             return sec;
-        }, s => '#sections.' + sectionTypeToPlural(s.type), 'A section of the module', null, true);
+        }, s => 'sections.' + sectionTypeToPlural(s.type), 'A section of the module', null, true);
         return section;
     }
 
     public read(): this {
-        this._decoder.offset = 0;
+        this._decoder.offset = this._startOffset;
         try {
             this._parseMagic();
             this._parseVersion();
