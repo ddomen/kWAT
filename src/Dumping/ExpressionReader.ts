@@ -15,6 +15,7 @@
   * along with this program.  If not, see <https://www.gnu.org/licenses/>.
   */
 
+ import { Type } from '../Types';
 import { protect } from '../internal';
 import { Instruction as IX } from '../Instructions';
 import { OpCodes, OpCodesExt1, OpCodesExt2 } from '../OpCodes';
@@ -26,13 +27,13 @@ export type ExpressionReaderEvent<K extends keyof ExpressionReaderEventMap = key
     type: K
 } & GenericReaderEvent;
 export type ExpressionReaderEventMap = {
-    error: Error,
+    error: { error: Error, index: number },
     all: ExpressionReaderEvent,
 
     expression: ExpressionReaderEvent<'expression', Expression>,
     'expression.instruction': ExpressionReaderEvent<'expression.instruction', Instruction>,
     'expression.instruction.code': ExpressionReaderEvent<'expression.instruction.code', OpCodes>,
-    'expression.instruction.code.extension': ExpressionReaderEvent<'expression.instruction.code.extension', OpCodesExt1 | OpCodesExt2>
+    'expression.instruction.code.extension': ExpressionReaderEvent<'expression.instruction.code.extension', OpCodesExt1 | OpCodesExt2>,
     'expression.instruction.value': ExpressionReaderEvent<'expression.instruction.value', any>
 }
 type ReaderEventEsK = { [K in keyof ExpressionReaderEventMap]: ExpressionReaderEventMap[K] extends ExpressionReaderEvent ? K : never  }[keyof ExpressionReaderEventMap];
@@ -76,13 +77,21 @@ export class ExpressionReader {
         return this;
     }
     
+    private _u_autoEmit<T>(
+        type: string,
+        fn: () => T,
+        id: string | ((v: T) => string),
+        description?: string | null | ((v: T) => string | null),
+        enumeration?: string | Record<any, any> | null | ((v: T) => string),
+        composite: boolean = false
+    ): T { return (this._autoEmit as any)(type as any, fn, id, description, enumeration, composite); }
     private _autoEmit<K extends ReaderEventEsK>(
         type: K,
         fn: () => ReaderEventValue<K>,
         id: string | ((v: ReaderEventValue<K>) => string),
         description?: string | null | ((v: ReaderEventValue<K>) => string | null),
         enumeration?: string | Record<any, any> | null | ((v: ReaderEventValue<K>) => string),
-        composite: boolean = false
+        composite: boolean | null = false
     ): ReaderEventValue<K> {
         const index = this._decoder.offset;
         const value = fn();
@@ -95,6 +104,7 @@ export class ExpressionReader {
                              null;
         description = ((typeof(description) === 'function' ? description(value) : description) || '') + '';
         id = (typeof(id) === 'function' ? id(value) : id) + '';
+        if (composite === null) { composite = typeof(value) === 'object' && value !== null; }
         this._emit(type, { data, index, value, type, composite, textualValue, description, id } as any);
         return value;
     }
@@ -128,45 +138,75 @@ export class ExpressionReader {
         if (methodName in this) {
             return this._autoEmit(
                 'expression.instruction.value',
-                () => (this as any)[methodName](),
+                () => (this as any)[methodName](index),
                 'expression.instructions[' + index + '].value',
-                desc
+                desc, null, null
             );
         }
         return null;
     }
 
     protected ['_parse_' + OpCodes.call]() { return this._decoder.uint32(); }
+    protected ['_parse_' + OpCodes.call_indirect](index: number) {
+        return {
+            type: this._u_autoEmit(
+                'expression.instruction.value.call_indirect.type',
+                () => this._decoder.uint32(),
+                'expression.instructions[' + index + '].value<call.indirect>.type'
+            ),
+            index: this._u_autoEmit(
+                'expression.instruction.value.call_indirect.reference',
+                () => this._decoder.uint32(),
+                'expression.instructions[' + index + '].value<call.indirect>.reference'
+            )
+        };
+    }
 
     protected ['_parse_' + OpCodes.i32_const]() { return this._decoder.uint32(); }
     protected ['_parse_' + OpCodes.i64_const]() { return this._decoder.uint64(); }
     protected ['_parse_' + OpCodes.f32_const]() { return this._decoder.float32(); }
     protected ['_parse_' + OpCodes.f64_const]() { return this._decoder.float64(); }
 
-    protected ['_parse_' + OpCodes.i32_store]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i32_store8]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i32_store16]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i64_store]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i64_store8]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i64_store16]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i64_store32]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.f32_store]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.f64_store]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
+    private _parse_memory(index: number, name: (keyof typeof OpCodes)) {
+        const rName = name.replace(/_/g, '.');
+        return {
+            memory:  this._u_autoEmit(
+                'expression.instruction.value.' + name + '.memory',
+                () => this._decoder.uint32(),
+                'expression.instructions[' + index + '].value<' + rName + '>.memory'
+            ),
+            index:  this._u_autoEmit(
+                'expression.instruction.value.' + name + '.index',
+                () => this._decoder.uint32(),
+                'expression.instructions[' + index + '].value<' + rName + '>.index'
+            )
+        };
+    }
+    
+    protected ['_parse_' + OpCodes.i32_store](index: number) { return this._parse_memory(index, 'i32_store'); }
+    protected ['_parse_' + OpCodes.i32_store8](index: number) { return this._parse_memory(index, 'i32_store8'); }
+    protected ['_parse_' + OpCodes.i32_store16](index: number) { return this._parse_memory(index, 'i32_store16'); }
+    protected ['_parse_' + OpCodes.i64_store](index: number) { return this._parse_memory(index, 'i64_store'); }
+    protected ['_parse_' + OpCodes.i64_store8](index: number) { return this._parse_memory(index, 'i64_store8'); }
+    protected ['_parse_' + OpCodes.i64_store16](index: number) { return this._parse_memory(index, 'i64_store16'); }
+    protected ['_parse_' + OpCodes.i64_store32](index: number) { return this._parse_memory(index, 'i64_store32'); }
+    protected ['_parse_' + OpCodes.f32_store](index: number) { return this._parse_memory(index, 'f32_store'); }
+    protected ['_parse_' + OpCodes.f64_store](index: number) { return this._parse_memory(index, 'f64_store'); }
 
-    protected ['_parse_' + OpCodes.i32_load]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i32_load8_s]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i32_load8_u]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i32_load16_s]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i32_load16_u]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i64_load]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i64_load8_s]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i64_load8_u]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i64_load16_s]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i64_load16_u]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i64_load32_s]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.i64_load32_u]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.f32_load]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
-    protected ['_parse_' + OpCodes.f64_load]() { return { memory: this._decoder.uint32(), index: this._decoder.uint32() }; }
+    protected ['_parse_' + OpCodes.i32_load](index: number) { return this._parse_memory(index, 'i32_load'); }
+    protected ['_parse_' + OpCodes.i32_load8_s](index: number) { return this._parse_memory(index, 'i32_load8_s'); }
+    protected ['_parse_' + OpCodes.i32_load8_u](index: number) { return this._parse_memory(index, 'i32_load8_u'); }
+    protected ['_parse_' + OpCodes.i32_load16_u](index: number) { return this._parse_memory(index, 'i32_load16_u'); }
+    protected ['_parse_' + OpCodes.i32_load16_s](index: number) { return this._parse_memory(index, 'i32_load16_s'); }
+    protected ['_parse_' + OpCodes.i64_load](index: number) { return this._parse_memory(index, 'i64_load'); }
+    protected ['_parse_' + OpCodes.i64_load8_s](index: number) { return this._parse_memory(index, 'i64_load8_s'); }
+    protected ['_parse_' + OpCodes.i64_load8_u](index: number) { return this._parse_memory(index, 'i64_load8_u'); }
+    protected ['_parse_' + OpCodes.i64_load16_s](index: number) { return this._parse_memory(index, 'i64_load16_s'); }
+    protected ['_parse_' + OpCodes.i64_load16_u](index: number) { return this._parse_memory(index, 'i64_load16_u'); }
+    protected ['_parse_' + OpCodes.i64_load32_s](index: number) { return this._parse_memory(index, 'i64_load32_s'); }
+    protected ['_parse_' + OpCodes.i64_load32_u](index: number) { return this._parse_memory(index, 'i64_load32_u'); }
+    protected ['_parse_' + OpCodes.f32_load](index: number) { return this._parse_memory(index, 'f32_load'); }
+    protected ['_parse_' + OpCodes.f64_load](index: number) { return this._parse_memory(index, 'f64_load'); }
 
     protected ['_parse_' + OpCodes.local_get]() { return this._decoder.uint32(); }
     protected ['_parse_' + OpCodes.local_set]() { return this._decoder.uint32(); }
@@ -174,8 +214,46 @@ export class ExpressionReader {
     protected ['_parse_' + OpCodes.global_get]() { return this._decoder.uint32(); }
     protected ['_parse_' + OpCodes.global_set]() { return this._decoder.uint32(); }
 
-    protected ['_parse_' + OpCodes.block]() { return this._parseExpression(); }
-    protected ['_parse_' + OpCodes.loop]() { return this._parseExpression(); }
+    private _parse_block(index: number, name: (keyof typeof OpCodes)) {
+        const rName = name.replace(/_/g, '.');
+        return {
+            type: this._u_autoEmit(
+                'expression.instruction.value.' + name + '.type',
+                () => this._decoder.uint32(),
+                'expression.instructions[' + index + '].value<' + rName + '>.type',
+                null, Type
+            ),
+            expression: this._u_autoEmit(
+                'expression.instruction.value.' + name + '.expression',
+                () => this._parseExpression(),
+                'expression.instructions[' + index + '].value<' + rName + '>.expression',
+                null, null, true
+            )
+        };
+    }
+
+    protected ['_parse_' + OpCodes.block](index: number) { return this._parse_block(index, 'block'); }
+    protected ['_parse_' + OpCodes.loop](index: number) { return this._parse_block(index, 'loop'); }
+    protected ['_parse_' + OpCodes.if](index: number) { return this._parse_block(index, 'if'); }
+
+    protected ['_parse_' + OpCodes.br]() { return this._decoder.uint32(); }
+    protected ['_parse_' + OpCodes.br_if]() { return this._decoder.uint32(); }
+    protected ['_parse_' + OpCodes.br_table](index: number) { 
+        const size = this._u_autoEmit(
+            'expression.instruction.value.br_table.memory',
+            () => this._decoder.uint32() + 1,
+            'expression.instructions[' + index + '].value<br.table>.size'
+        );
+        const res: number[] = [];
+        for (let i = 0; i < size; ++i) {
+            res.push(this._u_autoEmit(
+                'expression.instruction.value.br_table.label',
+                () => this._decoder.uint32(),
+                'expression.instructions[' + index + '].value<br.table>.labels[' + i + ']'
+            ));
+        }
+        return res;
+    }
 
     private _parseInstruction(index: number): Instruction {
         return this._autoEmit(
@@ -223,7 +301,12 @@ export class ExpressionReader {
                 null, true
             ) as Expression;
         }
-        catch (ex) { this._emit('error', ex instanceof Error ? ex : new Error(ex + '')); }
+        catch (ex) {
+            this._emit('error', {
+                error: ex instanceof Error ? ex : new Error(ex + ''),
+                index: this._decoder.offset
+            });
+        }
         return this;
     }
 

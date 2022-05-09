@@ -93,7 +93,7 @@ export type Element<M extends ElementMode = ElementMode> = {
 }
 
 export type ReaderEventMap = {
-    error: Error,
+    error: { error: Error, index: number },
     all: ReaderEvent,
     
     magic: ReaderEvent<'magic', string>,
@@ -1402,7 +1402,10 @@ export class Reader {
                 this._parseSection();
             }
         }
-        catch (ex) { this._emit('error', ex instanceof Error ? ex : new Error(ex + '')); }
+        catch (ex) { this._emit('error', {
+            error: ex instanceof Error ? ex : new Error(ex + ''),
+            index: this._decoder.offset
+        }); }
         return this;
     }
 
