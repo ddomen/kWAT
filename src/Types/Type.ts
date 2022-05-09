@@ -22,30 +22,26 @@ import type { LimitType, MemoryType } from './LimitType';
 
 /** Enumeration of Wasm available types and constants */
 export enum Type {
-    /** Constant (unmutable) global variable */
-    const               = 0x00,
-    /** The min descriptor of the memory limit */
-    limits_min          = 0x00,
-    /** The max descriptor of the memory limit */
-    limits_min_max      = 0x01,
-    /** Variable (mutable) global variable */
-    var                 = 0x01,
-    /** Type: 32 bit integer (the sign is determined by individual operations) */
-    i32                 = 0x7f,
-    /** Type: 64 bit integer (the sign is determined by individual operations) */
-    i64                 = 0x7e,
-    /** Type: 32 bit floating point (IEEE 754-2019 standards) */
-    f32                 = 0x7d,
-    /** Type: 64 bit floating point (IEEE 754-2019 standards) */
-    f64                 = 0x7c,
-    /** Constant describing a function */
+    /** Void type (used for describe empty result blocks) */
+    void                = 0x40,
+    /** Function descriptor type */
     func                = 0x60,
-    /** Type: reference to a function (regardless of the type)
+
+    /** 32 bit integer (the sign is determined by individual operations) */
+    i32                 = 0x7f,
+    /** 64 bit integer (the sign is determined by individual operations) */
+    i64                 = 0x7e,
+    /** 32 bit floating point (IEEE 754-2019 standards) */
+    f32                 = 0x7d,
+    /** 64 bit floating point (IEEE 754-2019 standards) */
+    f64                 = 0x7c,
+
+    /** Reference (pointer) to a function (regardless of the type)
      * 
      * *Reference types are opaque, meaning that neither their size nor their bit pattern can be observed.*
     */
     funcref             = 0x70,
-    /** Type: reference to an external object
+    /** Reference (pointer) to an external object
      * 
      * *Reference types are opaque, meaning that neither their size nor their bit pattern can be observed.*
     */
@@ -61,7 +57,7 @@ export type ValueType = NumberType | ReferenceType;
 /** The possible types returned by an instruction */
 export type ResultType = ValueType[];
 /** The kind of a global variable mutability */
-export type MutableType = Type.const | Type.var;
+export type BlockType = ValueType | Type.void;
 
 /** String keys of the {@link Type} enumeration */
 export type TypesKey<T extends Type=Type> = {
@@ -77,7 +73,7 @@ export type ReferenceTypeKey = TypesKey<ReferenceType>;
 /** All the keys of the {@link NumberType} */
 export type NumberTypeKey = TypesKey<NumberType>;
 /** All the keys of the {@link MutableType} */
-export type MutableTypeKey = TypesKey<MutableType>;
+export type BlockTypeKey = TypesKey<BlockType>;
 
 /** Collection of all numeric type ({@link NumberType}) */
 export const NumberTypeValues: NumberType[] = [ Type.i32, Type.i64, Type.f32, Type.f64 ];
@@ -86,7 +82,7 @@ export const ReferenceTypeValues: ReferenceType[] = [ Type.funcref, Type.externr
 /** Collection of all value type ({@link ValueType}) */
 export const ValueTypeValues: ValueType[] = [ ...NumberTypeValues, ...ReferenceTypeValues ];
 /** Collection of all global variable mutability ({@link MutableType}) */
-export const MutableTypeValues: MutableType[] = [ Type.const, Type.var ];
+export const BlockTypeValues: BlockType[] = [ ...NumberTypeValues, Type.void ];
 
 /** Collection of all numeric type keys ({@link NumberType}) */
 export const NumberTypeKeys = NumberTypeValues.map(v => Type[v]! as NumberTypeKey);
@@ -95,7 +91,7 @@ export const ReferenceTypeKeys = ReferenceTypeValues.map(v => Type[v]! as Refere
 /** Collection of all value type keys ({@link ValueType}) */
 export const ValueTypeKeys = ValueTypeValues.map(v => Type[v]! as ValueTypeKey);
 /** Collection of all global variable mutability keys ({@link MutableType}) */
-export const MutableTypeKeys = MutableTypeValues.map(v => Type[v]! as MutableTypeKey);
+export const BlockTypeKeys = BlockTypeValues.map(v => Type[v]! as BlockTypeKey);
 
 /** Check if a value is of {@link NumberType} type
  * @param {*} target the value to be checked
@@ -116,7 +112,7 @@ export function validValue(target: any): target is ValueType { return typeof(tar
  * @param {*} target the value to be checked
  * @return {boolean} whether or not the value is of the kind
 */
-export function validMutable(target: any): target is MutableType { return typeof(target) === 'number' && MutableTypeValues.indexOf(target) >= 0; }
+export function validBlock(target: any): target is BlockType { return typeof(target) === 'number' && BlockTypeValues.indexOf(target) >= 0; }
 
 /** Check if a value is of {@link NumberType} keys 
  * @param {*} target the value to be checked
@@ -137,7 +133,7 @@ export function validValueKey(target: string): target is ValueTypeKey { return t
  * @param {*} target the value to be checked
  * @return {boolean} whether or not the value is a key of the given kind
 */
-export function validMutableKey(target: string): target is MutableTypeKey { return typeof(target) === 'string' && MutableTypeKeys.indexOf(target as any) >= 0; }
+export function validBlockKey(target: string): target is BlockTypeKey { return typeof(target) === 'string' && BlockTypeKeys.indexOf(target as any) >= 0; }
 
 
 /** Types that can be imported/exported by a module */
