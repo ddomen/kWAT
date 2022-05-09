@@ -77,11 +77,9 @@ export class CodeSegment implements IEncodable<[Module, WasmOptions]> {
         let locals: Type[] = [], n, l;
         for (let i = 0; i < nLocals; ++i) {
             n = decoder.uint32();
-            for (let j = 0; j < n; ++j) {
-                l = decoder.uint8();
-                if (!(l in Type)) { throw new KWatError('Invalid Code Segment Local Type'); }
-                locals.push(l);
-            }
+            l = decoder.uint8();
+            if (!(l in Type)) { throw new KWatError('Invalid Code Segment Local Type'); }
+            for (let j = 0; j < n; ++j) { locals.push(l); }
         }
         let body = decoder.decode(Expression, context.module, context.options);
         if (curr - decoder.remaining !== len) { throw new KWatError('Invalid Code Segment length'); }

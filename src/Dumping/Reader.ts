@@ -158,7 +158,9 @@ export type ReaderEventMap = {
     'section.codes.function': ReaderEvent<'section.codes.function', SectionBody>,
     'section.codes.function.size': ReaderEvent<'section.codes.function.size', number>,
     'section.codes.function.locals': ReaderEvent<'section.codes.function.locals', Type[]>,
-    'section.codes.function.locals.local': ReaderEvent<'section.codes.function.locals.local', { type: Type, index: number }>,
+    'section.codes.function.locals.local': ReaderEvent<'section.codes.function.locals.local', { type: Type, amount: number }>,
+    'section.codes.function.locals.local.amount': ReaderEvent<'section.codes.function.locals.local.amount', number>,
+    'section.codes.function.locals.local.type': ReaderEvent<'section.codes.function.locals.local.type', Type>,
     'section.codes.function.locals.size': ReaderEvent<'section.codes.function.locals.size', number>,
     'section.codes.function.body': ReaderEvent<'section.codes.function.body', Expression>,
 
@@ -657,19 +659,42 @@ export class Reader {
                 'section.codes.function.locals.size',
                 () => this._decoder.uint32(),
                 sid + '.locals',
-                'The number of local variables (excluding parameters) of the current function' + ref
+                'The number of local variables types of the current function' + ref
             );
             const locals = this._autoEmit(
                 'section.codes.function.locals',
                 () => {
                     let l: Type[] = [];
                     for (let i = 0; i < nLocals; ++i) {
-                        l.push(this._autoEmit(
+                        const off = this._decoder.offset;
+                        const amount = this._decoder.uint32();
+                        const type = this._decoder.uint8();
+                        const typeStr = Type[type] || 'unknown';
+                        this._decoder.offset = off;
+
+                        this._autoEmit(
                             'section.codes.function.locals.local',
-                            () => ({ type: this._decoder.uint8(), index: i }),
-                            sid + '.locals[' + i + '].type',
-                            'The local variable type', Type
-                        ).type)
+                            () => {
+                                this._autoEmit(
+                                    'section.codes.function.locals.local.amount',
+                                    () => this._decoder.uint32(),
+                                    sid + '.locals[' + i + ']<' + typeStr + '>.amount',
+                                    'The amount of local variables of the given type'
+                                );
+                                this._autoEmit(
+                                    'section.codes.function.locals.local.type',
+                                    () => this._decoder.uint8(),
+                                    sid + '.locals[' + i + ']<' + typeStr + '>.type',
+                                    'The type of the local variables precendetly counted',
+                                    Type
+                                );
+                                for (let j = 0; j < amount; ++j) { l.push(type); }
+                                return { type, amount };
+                            },
+                            sid + '.locals[' + i + ']<' + typeStr + '>',
+                            'A set of local variable descriptors',
+                            null, true
+                        );
                     }
                     return l;
                 },
