@@ -18,6 +18,7 @@
 if (typeof(require) !== 'undefined' && typeof(module) !== 'undefined' && require.main === module) {
     const fs = require('fs');
     const path = require('path');
+    const kwat = require('../kwat');
     
     try {
         const args = (function(args){
@@ -51,9 +52,7 @@ if (typeof(require) !== 'undefined' && typeof(module) !== 'undefined' && require
     
                 try { s = fs.readFileSync(f, { encoding: 'utf-8' }); }
                 catch { console.error('[FILE][ERROR]: Can not open file: \'' + f + '\''); process.exit(1); break; }
-                try { s = module.exports.parse(s.toString()); }
-                catch (e) { console.error('[PARSE][ERROR]: Error during parsing of file \'' + f + '\' - ' + e); process.exit(1); break; }
-                try { s = module.exports.compile(s); }
+                try { s = kwat.compile(s.toString()); }
                 catch (e) { console.error('[COMPILE][ERROR]: Error during compilation of file \'' + f + '\' - ' + e); process.exit(1); break; }
                 try { fs.mkdirSync(od, { recursive: true }); fs.writeFileSync(o, s); }
                 catch (e) { console.error('[FILE][ERROR]: Error during writing of file \'' + o + '\' - ' + e); process.exit(1); break; }
