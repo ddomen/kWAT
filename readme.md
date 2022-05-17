@@ -138,3 +138,7 @@ A command line interface for the read/write tools.
 
 ### Runtime
 A runtime capable to execute WebAssembly modules/buffer in any JavaScript, completely environment independent.
+
+## Example
+### [Kwat-Explorer](https://ddomen.altervista.org/kwat)
+A web interface that allows to explore and understand the various parts of a WebAssembly binary module.

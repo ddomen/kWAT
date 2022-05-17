@@ -631,7 +631,7 @@ export class Reader {
                 v => 'The index of the exported element in the corrispective section (#sections.' +
                         sectionTypeToPlural(ExchangeDescriptionCode[kind] + '') + '[' + v + '])'
             );
-            return { module, name, kind, reference, index };
+            return { name, kind, reference, index };
         }, sid, 
         'An export statement including the element name and its declaration, which can be a function, a memory, a table or a global variable',
         null, true)
