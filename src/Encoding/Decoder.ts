@@ -233,8 +233,8 @@ export class Decoder implements IDecoder {
             default: return dec_s_leb128(this, 32)
         }
     }
-    public float32(): number { return this._view.getFloat32(this._advance(4)); }
-    public float64(): number { return this._view.getFloat64(this._advance(8)); }
+    public float32(): number { return this._view.getFloat32(this._advance(4), true); }
+    public float64(): number { return this._view.getFloat64(this._advance(8), true); }
     
     public vector<T>(value: IDecodable<T>): T[];
     public vector<T, C>(value: IDecodable<T, C>, ...context: Args<C>): T[];
