@@ -345,6 +345,11 @@ function enc_32_ieee754_2019(value: number): number {
             bytes = bytes | (significand & ~(-1 << 23));
         break;
     }
+    bytes = ((bytes & 0x000000ff) << 24) |
+            ((bytes & 0x0000ff00) <<  8) |
+            ((bytes & 0x00ff0000) >>  8) |
+            ((bytes & 0xff000000) >> 24)
+    ;
     return bytes;
 }
 
